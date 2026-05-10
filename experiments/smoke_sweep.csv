@@ -1,0 +1,5 @@
+weights,coeffs,tta,interp,blend,sharpen,sharpen_radius,clip_mode,psnr,ssim,edge,proxy
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.0,0.05,1.0,hard,37.519283,0.998523,0.982087,45.474596
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.0,0.0,1.0,hard,37.511295,0.998524,0.981925,45.46629
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.05,0.05,1.0,hard,37.509219,0.998524,0.981909,45.464182
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.05,0.0,1.0,hard,37.471355,0.998496,0.981639,45.425607

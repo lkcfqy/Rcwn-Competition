@@ -1,0 +1,10 @@
+torch
+torchvision
+opencv-python-headless
+numpy
+timm
+einops
+basicsr==1.3.4.9
+piq
+lpips
+tqdm

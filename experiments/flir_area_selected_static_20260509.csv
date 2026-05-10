@@ -1,0 +1,3 @@
+source,path,images,match_strength,sigma,interp,sigma_jitter,noise_std,gamma_jitter,official_score,test_score,total_score,edge_mean,fft_high_ratio,std
+flir_all_area_ref,external_data/FLIR-IISR/FLIR-IISR/HR,128,1.0,0.5,area,0.0,0.0,0.0,0.7660649847151761,0.6456793069428887,0.7299492813834898,0.15348985431774054,0.027386127822274946,0.19313251663697883
+flir_area_sel,external_data/FLIR-IISR/FLIR-IISR/HR,128,1.0,0.5,area,0.0,0.0,0.0,0.7793464871900249,0.6630128033258075,0.7444463820307596,0.14149474223086145,0.022878313739882424,0.19532997644273564

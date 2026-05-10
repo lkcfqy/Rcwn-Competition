@@ -1,0 +1,66 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+venv/
+.venv/
+.venv_*/
+
+# Local environment
+.env
+.env.*
+.python-version
+
+# Large datasets and external repos / weights
+超分竞赛数据集/
+external_data/
+external_models/
+
+# Training artifacts
+checkpoints/
+checkpoints_*/
+outputs/
+runs/
+wandb/
+*.pth
+*.pt
+*.ckpt
+*.onnx
+
+# Logs are useful locally but too noisy for Git.
+logs/
+*.log
+
+# Generated submissions. Keep only the human-facing writeup.
+submission/*.zip
+submission/*/
+!submission/README.md
+
+# Keep experiment tables and small text manifests tracked by default.
+!experiments/
+!experiments/*.csv
+!experiments/*.txt
+!experiments/README.md
+!*.md
+
+# Re-ignore rebuildable experiment caches and ranking dumps.
+experiments/*_rank_*.csv
+experiments/*_top1024*.txt
+experiments/*_top140*.txt
+experiments/*_top320*.txt
+experiments/router_analysis_*/
+experiments/router_metrics_*/
+experiments/lr_cluster_names_*/

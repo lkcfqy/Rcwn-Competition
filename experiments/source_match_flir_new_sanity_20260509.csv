@@ -1,0 +1,2 @@
+source,path,images,match_strength,sigma,interp,sigma_jitter,noise_std,gamma_jitter,official_score,test_score,total_score,edge_mean,fft_high_ratio,std
+flir_new,external_data/FLIR_IISR_HR_topgrad1024_official_cubic_noise025_matched/target_640,64,1.0,0.5,cubic,0.0,0.25,0.0,0.36644757174815473,0.4112073834599778,0.3798755152617016,0.3842394584789872,0.09102730447192711,0.20080405566841364

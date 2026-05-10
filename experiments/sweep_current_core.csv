@@ -1,0 +1,9 @@
+weights,coeffs,tta,interp,blend,sharpen,sharpen_radius,clip_mode,psnr,ssim,edge,lpips,proxy
+checkpoints_pixel/best_x2_fp16.pth,,True,lanczos,0.0,0.05,1.0,hard,32.084521,0.997261,0.961947,0.059674,39.872634
+checkpoints_pixel/best_x2_fp16.pth,,True,lanczos,0.03,0.05,1.0,hard,32.085799,0.997277,0.961946,0.061062,39.871231
+checkpoints_pixel/best_x2_fp16.pth,,True,lanczos,0.0,0.0,1.0,hard,32.084166,0.997282,0.961854,0.061789,39.867988
+checkpoints_pixel/best_x2_fp16.pth,,True,lanczos,0.03,0.0,1.0,hard,32.072448,0.997268,0.961787,0.063308,39.853012
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.03,0.05,1.0,hard,32.042947,0.997219,0.961767,0.059659,39.830475
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.0,0.05,1.0,hard,32.039417,0.9972,0.96176,0.058235,39.829666
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.0,0.0,1.0,hard,32.041962,0.997225,0.961672,0.060362,39.827931
+checkpoints_pixel/best_x2_fp16.pth,,False,lanczos,0.03,0.0,1.0,hard,32.032528,0.997213,0.961614,0.06192,39.815195

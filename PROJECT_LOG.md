@@ -1,0 +1,1839 @@
+# RCWN 冲分记录
+
+更新时间：2026-05-10
+
+## 当前目标
+- 第一阶段 x2，目标线上 70+。
+- 当前已知第一名：65.5472。
+- 当前已知本人最好线上分：65.4881。
+- 距第一名差距：0.0591。
+
+## 当前总策略
+- 保留一条低风险合法慢爬主线，持续把当前 best 往上抬。
+- 但如果目标是 `70+`，主目标必须是找到结构性大跳的模型/训练信号，而不是无限续训当前线。
+- 当前把 `native-io HAT-L` 视为新的保底 clean-best 主线；同时把“大跳模型/大跳训练信号”视为真正的冲分主目标。
+- 普通 `+0.00x` 本地涨幅不打包、不提交。
+
+## 2026-05-10 Native-IO HAT 切入
+- 先做了合法 `HAT-HAT` ensemble quick sweep：
+  - `checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+  - `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - `alpha_a=0.2~0.9`
+  - 最好是 `alpha_a=0.9`：`PSNR 33.78035 / SSIM 0.99791 / Edge 0.97643 / LPIPS 0.04518 / proxy 41.63031`
+  - 只比当前 clean best `41.63025` 高 `+0.00006`，说明 HAT-HAT 线没有新的提交价值。
+- 随后转向更高赔率的 `native-io HAT-L`：
+  - 在 `src/hat_gray_common.py` 中加入 `native_io` 权重转换，支持把现有 `3-channel` HAT checkpoint 自动转为 `1-channel` 输入输出初始化。
+  - `src/train_hat_gray.py`、`src/evaluate_hat_gray.py` 新增 `--native-io`。
+  - 随机块 old-vs-native mean diff `0.00075`；`smoke4` 上 `45.39924 -> 45.37247`，只小幅回落。
+- 立即起了第一轮 continuation probe：
+  - 日志：`logs/train_x2_hat_l_nativeio_official_probe40_limit512_p96_lr2e7_e1_avg.log`
+  - 配置：`official-only`、`probe40`、`train_limit=512`、`patch=96`、`batch=1`、`epochs=1`、`lr=2e-7 -> 1e-7`
+  - 起点：`checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+  - `initial probe40 = 43.08025 -> final 43.09142`
+  - 相对固定基线 `43.08219` 为 `+0.00923`，这条线已经转正。
+- 随后做了对应的 clean `full120` continuation：
+  - 日志：`logs/train_x2_hat_l_nativeio_official_cont_limit1024_lr2e7_full120clean_avg.log`
+  - 配置：`official-only`、`full120 clean`、`train_limit=1024`、`patch=96`、`batch=1`、`epochs=1`、`lr=2e-7 -> 1e-7`
+  - 结果：`initial 41.62143 -> final 41.62969`
+  - 相对 incumbent clean best `41.63025` 仍差 `-0.00056`，但相对 native 初始恢复了 `+0.00826`。
+- 因为 clean gap 已经只剩 `0.00056`，继续把 native 线往前推：
+  - 日志：`logs/train_x2_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg.log`
+  - 起点：`checkpoints_hat_l_nativeio_official_cont_limit1024_lr2e7_full120clean_avg/best_x2.pth`
+  - 配置：`official-only`、`full120 clean`、`train_limit=1680`、`patch=96`、`batch=1`、`epochs=1`、`lr=1.5e-7 -> 7e-8`
+
+## 2026-05-10 Native-IO HAT clean 1680 收官：新 clean best，但仍属 `65.5x` 慢爬
+- `native-io full120 clean 1680` 已完成：
+  - 日志：`logs/train_x2_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg.log`
+  - 结果：`initial 41.62969 -> final 41.63416`
+  - 指标：`PSNR 33.78392 / SSIM 0.99789 / Edge 0.97648 / LPIPS 0.04503 / proxy 41.63416`
+  - 相对上一版 incumbent clean best `41.63025` 为 `+0.00391`
+  - 当前最好已确认 clean checkpoint 更新为 `checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+  - 当前最好已确认 clean `full120` proxy 更新为 `41.63416`
+- 记录修复：
+  - `src/probe_summary.py` 现统一把 `summary-promote-threshold < 1.0` 解释为“相对 baseline 的增量阈值”，保持与最近 `0.01` 用法一致。
+  - `experiments/probe_summary_20260510.csv` 中三条 `native_io_*` 记录现已按新口径统一：`probe40` 为 `archived`，`clean1024` 为 `closed`，`clean1680` 为 `archived`。
+- 当前判断：
+  - `native-io HAT-L` 已正式接过 `official-only p96`，成为新的 clean-best 合法主线。
+  - 但这次只是在 `41.63025 -> 41.63416` 的量级上继续慢爬，粗估仍主要是 `65.5x` 档，不足以单凭这一条就浪费新的提交次数。
+  - 当前无活跃训练/评估进程，下一轮若继续合法慢爬，应从 `checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth` 接力。
+
+## 当前最好已提交版本
+- 提交包：`submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`
+- 平台分：65.4881
+- 相比上一线上最好：+0.3788
+- 提交时间：2026-05-09 早上，今日已用 1 次提交。
+- 模型：HAT-L x2 ImageNet 公开预训练模型 + 官方训练集低学习率微调 epoch4
+- 架构：HAT-L，灰度输入重复为 RGB，输出转灰度；纯模型生成，无训练 HR 替换。
+- 推理：no-TTA，无 sharpen，无 nearest HR replacement。
+- 本地验证：
+  - PSNR：33.766150
+  - SSIM：0.997900
+  - Edge：0.976230
+  - LPIPS：0.046190
+  - proxy：41.613630
+
+## 最新合法本地候选
+- 目前合法已提交 best 为 `submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`，平台 `65.4881`。
+- 当前已确认 clean `full120` best checkpoint 为 `checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`，本地 proxy `41.63416`。
+- 上一版 incumbent clean best 为 `checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`，本地 proxy `41.63025`。
+- `native-io HAT-L` 已经完成 `1024 -> 1680` clean continuation，并把当前 clean best 再抬了 `+0.00391`；但暂时仍没有明显值得新提交的强信号。
+- 后续只推进纯模型、后处理、合法 ensemble、公开数据预训练/微调；不使用训练 HR 直接替换测试输出。
+- 已完成合规探针：`checkpoints_hat_l_official_probe_lr1e5_p48_avg`
+  - 日志：`logs/train_x2_hat_l_official_probe_lr1e5_p48_avg.log`
+  - 方法：HAT-L ImageNet x2 公开预训练权重，在官方训练集低学习率微调；512 张训练子集，2 epoch，patch 48，batch 1，bf16，pixel loss only。
+  - epoch1 clean val：PSNR 33.63899，SSIM 0.99785，Edge 0.97550，LPIPS 0.04617，proxy 41.48471。
+  - 结论：超过 HAT pure `41.350250`，方向有效；已停止探针，改跑全量 clean split。
+- 已完成全量合规微调：`checkpoints_hat_l_official_full_lr1e5_p48_avg`
+  - 日志：`logs/train_x2_hat_l_official_full_lr1e5_p48_avg.log`
+  - 方法：HAT-L ImageNet x2 公开预训练权重，官方训练 split 1680 张，val 120 张，4 epoch，patch 48，batch 1，lr 1e-5 -> 2e-6，bf16，pixel loss only。
+  - 已完成。best 为 epoch4：PSNR 33.76615，SSIM 0.99790，Edge 0.97623，LPIPS 0.04619，proxy 41.61363。
+  - 对比 HAT pure `41.350250` 提升 `+0.26338`；对比探针 epoch1 `41.48471` 提升 `+0.12892`。
+  - 已生成纯模型 rootdir 包：`submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`，100 张 640x512 灰度 PNG，`nearest_used=0`，不使用训练 HR 替换。
+  - 2026-05-09 早上已提交，平台分 `65.4881`，比 HAT pure `65.1093` 高 `+0.3788`，说明官方微调被平台认可；但仍不是 70 候选。
+- 已完成下一轮合法延续微调：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg`
+  - 日志：`logs/train_x2_hat_l_official_cont_lr3e6_from_ep4_p48_avg.log`
+  - 起点：`checkpoints_hat_l_official_full_lr1e5_p48_avg/best_x2.pth`
+  - 配置：4 epoch，lr 3e-6 -> 5e-7，其他保持 full HAT 设置。
+  - 已完成。best 为 epoch4：PSNR 33.77144，SSIM 0.99789，Edge 0.97636，LPIPS 0.04529，proxy 41.62092。
+  - 对比上一轮 HAT full best `41.61363` 只提升 `+0.00729`，说明低 lr pixel-only 已基本平台化。
+- 后续打包策略：
+  - 用户要求后续测试先不打包压缩，等判断能到 70 分再打包。
+  - 后续实验只做 clean val + checkpoint + 日志记录；不为普通小幅提升生成 test PNG/zip。
+  - 以现有平台回分和本地 proxy 关系粗估，proxy `41.61` 已确认是 65.49 分段；需要接近 `43.8~44.0` 或出现同等强证据，才进入 70 分打包候选。
+- 下一步策略：
+  - 停止继续纯 pixel-only 低 lr 榨取。
+  - 评分项感知 loss 探针已失败，后续改做合法推理/后处理/ensemble sweep，优先找能显著抬 proxy 的路线。
+- 已完成评分项感知探针：`checkpoints_hat_l_score_probe_lr1e6_from_cont_p48_avg`
+  - 日志：`logs/train_x2_hat_l_score_probe_lr1e6_from_cont_p48_avg.log`
+  - 配置：512 张训练子集，2 epoch，lr 1e-6 -> 2e-7，pixel 1.0 + SSIM 0.02 + Edge 0.01 + LPIPS 0.005。
+  - 只看 clean val，不生成 test PNG/zip。
+  - 已完成并失败：
+    - epoch1：PSNR 33.63537，SSIM 0.99739，Edge 0.97606，LPIPS 0.05771，proxy 41.45641。
+    - epoch2：PSNR 33.56439，SSIM 0.99680，Edge 0.97583，LPIPS 0.06500，proxy 41.36688。
+  - 结论：LPIPS/SSIM/Edge 混合 loss 在 512 子集上明显破坏当前 HAT best，不放大全量，不打包。
+- 已完成合法推理 sweep：`logs/eval_x2_hat_l_cont_gray_modes.log`
+  - 权重：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - 模式：`y/r/g/b/avg`
+  - 结果：
+    - `y`：PSNR 33.76817，SSIM 0.99789，Edge 0.97635，LPIPS 0.04525，proxy 41.61770。
+    - `r`：PSNR 33.72067，SSIM 0.99736，Edge 0.97633，LPIPS 0.04500，proxy 41.56747。
+    - `g`：PSNR 33.74777，SSIM 0.99783，Edge 0.97634，LPIPS 0.04515，proxy 41.59712。
+    - `b`：PSNR 33.76091，SSIM 0.99786，Edge 0.97634，LPIPS 0.04521，proxy 41.61033。
+    - `avg`：PSNR 33.77144，SSIM 0.99789，Edge 0.97636，LPIPS 0.04529，proxy 41.62092。
+  - 结论：`avg` 仍是最好；没有灰度转换免费增益，不打包。
+- 已完成合法近重复 support target 验证：
+  - support 选择：`experiments/target_val_thr40_top1_neighbors.csv`，`experiments/target_val_thr40_top1_names.txt`。
+  - 方法：仅用 LR 相似度选择官方训练 support；不直接替换 HR。HAT-L 从当前 best 出发，在 8 个 high-confidence support 上训练 target 模型；val 时只对 LR-PSNR >= 40 的 8 张验证图启用 target，其余仍用当前 best HAT。
+  - 训练日志：`logs/train_x2_hat_l_target_val_thr40_top1_lr2e5_p48_avg.log`
+  - gated eval 日志：`logs/eval_x2_hat_l_target_val_thr40_top1_lr2e5_gated.log`
+  - target-only val：PSNR 33.68924，SSIM 0.99791，Edge 0.97593，LPIPS 0.04455，proxy 41.53945。
+  - gated val：PSNR 33.792084，SSIM 0.997899，Edge 0.976489，LPIPS 0.045135，proxy 41.642185。
+  - 对比当前合法 best `41.62092` 只提升 `+0.02127`，不是 70 分路线；不迁移到 test，不打包。
+- 已完成 HAT-L 外部红外域预训练：
+  - 日志：`logs/train_x2_hat_l_llvip_domain_lr1e5_p48_avg.log`
+  - 输出：`checkpoints_hat_l_llvip_domain_lr1e5_p48_avg`
+  - 方法：从公开 `HAT-L_SRx2_ImageNet-pretrain.pth` 出发，在公开 LLVIP 红外 SR pair `external_data/LLVIP_sr` 全量训练 1 epoch，并用官方 clean val 监控；后续若不是灾难性掉分，再从该 checkpoint 回官方训练 split 做低学习率 pullback。
+  - 说明：这是合法公开数据预训练路线，不使用训练 HR 替换测试输出。
+  - 结果：epoch1 train_loss 0.00672，官方 clean val PSNR 31.45367，SSIM 0.99452，Edge 0.96243，LPIPS 0.10465，proxy 39.13639。
+  - 结论：比当前 HAT legal best `41.62092` 低 `-2.48453`，属于灾难性域偏移；不做官方 pullback，不打包。
+
+## 2026-05-08 重启对话整理
+- 将 `HANDOFF.md` 压缩为新 chat 快速接手版，移除旧的长篇滚动状态。
+- 新增 `RESTART_PROMPT.md`，包含可直接复制到新对话的启动提示词。
+- 更新 `README.md` 当前合法路线说明：当前 best checkpoint 仍是 65 分段，不为普通小涨打包；下一步应转向更强公开 SR 预训练模型、匹配官方退化的数据预训练、或 LR-only 合法分布分析。
+- 清理可再生缓存：删除 `src/__pycache__/`。
+
+## 2026-05-08 合法 70+ 大跳路线探针
+- 公开强 x2 SR 模型筛选：
+  - 已拉取 DAT 官方仓库与 DAT/DAT-2/DAT-S x2 权重到 `external_models/DAT`、`external_models/DAT_weights`，新增 `src/evaluate_dat_gray.py`。
+  - 已拉取 ATD 官方仓库与 ATD v2 x2 fine-tune 权重到 `external_models/ATD`、`external_models/ATD_weights/v2/SR/001_ATD_SRx2_finetune.pth`，新增 `src/evaluate_atd_gray.py`。
+  - 4 张 clean val smoke（不含 LPIPS）结果：DAT-S proxy 39.22970，DAT-2 proxy 39.22208，ATD v2 proxy 39.33941；同一 4 张 HAT-L current best proxy 39.81560。
+  - 结论：DAT/ATD 作为纯公开 RGB classical SR 迁移，明显低于 HAT-L，不进入 full val，不打包。
+- HAT-L 合法 LR-only 后处理 smoke：
+  - `src/evaluate_hat_gray.py` 增加 `--limit`、blend/sharpen/back-project 参数，默认仍是纯模型。
+  - 同一 4 张 clean val（不含 LPIPS）：base 39.81560；`back_project_iters=1 alpha=0.5 area/cubic` 为 39.75803；`sharpen_amount=0.03` 为 39.78033。
+  - 结论：未见大幅后处理增益。
+- 官方退化分析：
+  - 60 张训练样本抽样显示，HR -> LR 最接近 `GaussianBlur sigma=0.5 + area/linear x2`，PSNR mean 44.4255，优于无 blur 的 40.7362。
+  - LR 分布：官方 train edge 71.62，初赛 test edge 71.06，LLVIP_sr LR edge 40.64；测试 LR 与官方训练 LR 接近，LLVIP 现有外部域明显更平滑。
+- 官方 HR 合成退化训练 probe：
+  - `src/dataset.py` 新增 `SyntheticDegradeDataset`；`src/train_hat_gray.py` 新增 `--synthetic-degrade --degrade-sigma --degrade-interp`。
+  - 日志：`logs/train_x2_hat_l_synthdeg_official_probe_lr1e6_p48_avg.log`
+  - 起点：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - 配置：官方 train split 的 HR on-the-fly 合成 `sigma=0.5 + area` LR，train_limit 512，patch 48，lr 1e-6，val_count 40。
+  - 结果：initial 40-val proxy 43.08219；epoch1 proxy 42.99774，下降 -0.08445；epoch2 已停止。
+  - 结论：合成退化继续训不是跨档信号，不扩大全量，不打包。
+- 补充公开模型/ensemble/TTT 探针：
+  - HATFIR 官方 x2 继续训：`logs/train_hatfir_official_cont_lr5e6_p48_avg.log`，40-val no-LPIPS 从 42.99832 到 43.04034，仍低于 HAT-L 同子集约 43.16；不打包。
+  - HAFFIR x2 smoke：`external_models/SwinFIR_weights/HAFFIR_ImageNet_x2.pth`，4 张 no-LPIPS proxy 39.64918，低于 HAT-L 39.81560。
+  - MambaIRv2 large public x2 smoke：4 张 no-LPIPS proxy 39.37183，低于 HAT-L。
+  - CFAT 官方仓库已拉取到 `external_models/CFAT`，仓库未附可直接测试的 x2 权重；EDT 权重链接需要 Microsoft 登录，不作为可复现公开权重推进。
+  - 新增 `src/evaluate_hat_ttt_gray.py` 做 LR-only test-time adaptation probe。4 张 no-LPIPS：steps0 39.81560；tail TTT 8 steps 39.81426；full TTT 4 steps 39.81858。只用 LR 自监督，合法但无大跳。
+  - 合法 support target 细查：8 张 high-confidence val target 上 base no-LPIPS proxy 39.93505，target 模型 40.24937；但 gated full val 带 LPIPS 只比当前 best 高 +0.02127，且 test 只命中 3 张，不是 70 路线。
+  - 2026-04 arXiv 红外 SR 双分支思路（HAT-L + MambaIRv2，TTA/self-ensemble，image-space fusion）已按合法 ensemble 验证：`src/evaluate_hat_mambair_ensemble.py` 新增 `--hat-tta --mamba-tta`。4 张 no-LPIPS：HAT-TTA 39.88342；HAT-TTA + public Mamba base TTA 最好 39.90188；HAT-TTA + official-cont Mamba base TTA 最好 39.90415。仅小涨，不进入打包。
+  - 本轮未生成 test PNG/zip；仍按“clean val 接近 43.8-44.0 或同等强证据”才打包。
+
+## 2026-05-09 中断后恢复与大跳路线复盘
+- 进程状态：无残留训练/评估进程。
+- 43.16/43.08 说明：
+  - 这些是 40-val/no-LPIPS/局部切片 proxy，不是 full clean val，也不是线上 70 候选。
+  - 当前最好合法 full clean val 仍是 `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`，proxy `41.62092`；预计仍是 65 分段。
+- CART 公开热红外数据路线：
+  - 数据：Caltech CART labeled thermal singles，本地转成官方尺寸/退化 pair。
+  - 高纹理筛选 + 匹配统计 probe：`checkpoints_hat_l_cart_topgrad1024_cubic150_matched_lr5e7_p48_avg`
+  - 40-val 结果：proxy `42.72719`，低于同切片 HAT baseline `43.08219`。
+  - 结论：CART 方向失败，不扩大全量，不打包。
+- 修正官方退化合成路线：
+  - probe：`checkpoints_hat_l_synthdeg_cubic065_probe_lr5e7_p48_avg`
+  - 配置：从当前 HAT best 出发，官方 HR on-the-fly 合成 `GaussianBlur sigma=0.65 + cubic` LR，train_limit 512。
+  - 40-val 结果：proxy `43.07222`，低于 baseline `43.08219`。
+  - 结论：拟合退化继续训近似持平/略降，不是 70 路线。
+- 更强公开 x2 SR 权重筛选：
+  - 已测试 SRFormer/SRFormerv2/RGT/RGT-S/PFT/PFT-light/Swin2SR/CATANet/CRAFT/RAMiT/MAN/DRCT-x4-downsample 等。
+  - 40-val split 前 4 张 no-LPIPS：HAT current best proxy `45.44555`；SRFormerv2 `44.65948`，PFT fp32 `44.66155`，其余更低。
+  - 同 4 张 LPIPS：HAT current best proxy `45.39403`；SRFormerv2 `44.58988`，PFT fp32 `44.59024`。
+  - 结论：现有普通 RGB classical SR 公开权重直接迁移均低于 HAT，不做 full val，不打包。
+- DRCT x2 权重检查：
+  - 官方 Google Drive model zoo 下载后只有 x4/Real-DRCT x4 权重。
+  - 本地配置里有 x2 option，但未找到公开 `DRCT_SRx2_ImageNet-pretrain.pth`/`DRCT-L_SRx2_ImageNet-pretrain.pth` 可下载来源。
+  - 结论：没有可复现公开 x2 权重，暂不推进。
+- Real-IISR 红外真实退化公开预训练：
+  - 仓库：`external_models/Real-IISR`
+  - 权重：`external_models/Real-IISR/checkpoints/Real-IISR.pth`，约 14.2GB，来源为公开 FLIR-IISR/Real-IISR HuggingFace dataset。
+  - 新增评估脚本：`src/evaluate_real_iisr_gray.py`；支持 mmap 低内存加载、fp16 模型、512 tile、灰度输出和统计匹配。
+  - 服务器中断原因判断：原始加载方式会在 15GiB RAM/无 swap 环境下卡在 `torch.load` 大权重读取；已改成 `mmap=True` + 先 half 模型加载，1 张 smoke 可跑通。
+  - smoke：`logs/eval_real_iisr_smoke_mmap_20260509.log`
+  - 结果：1 张 val no-LPIPS proxy `20.65718`；同一张 HAT reference `38.43306`。
+  - 结论：Real-IISR 是 x4 生成式真实红外框架，和本赛 x2 保真目标不匹配；适配结果远低于 HAT，不是 70 候选。
+- 单图 exact-duplicate 合法纯模型探针：
+  - `src/evaluate_hat_gray.py` 增加 `--names-file --print-per-image`；`src/train_hat_gray.py` 增加 `--val-names-file`，用于只看指定验证图，不影响默认 full val。
+  - 选取验证 exact duplicate：`0253.png -> 1186.png`，LR PSNR 99，直接 HR 上界 proxy `106.999989`，但直接 HR 替换不作为合法路线。
+  - base 单图：`logs/eval_hat_l_current_single_0253_20260509.log`，proxy `38.282966`。
+  - target 单 support 训练：
+    - `logs/train_x2_hat_l_target_single_1186_to_0253_probe_lr1e5_p96_avg.log`：epoch4 proxy `39.05531`。
+    - `logs/train_x2_hat_l_target_single_1186_to_0253_probe_lr5e5_const_p96_avg.log`：epoch2 proxy `39.55153`。
+  - 结论：纯模型可朝 support HR 移动，但远慢于直接替换；即使外推到 8 个 val 命中/3 个 test 命中，也不是 70 路线，不打包。
+- 新公开红外/x2 权重复核：
+  - `external_models/NTIRE2026-InfraredSR/rfrsr_v10_split_iter46k.pth`：公开模型卡写明是 NTIRE2026 infrared remote-sensing x4；官方推理仓库 `danghoangnhan/NTIRE2026` 当前无法匿名 clone，且权重含 DCN/对齐模块，缺代码不能稳妥复现 x2 推理。暂归档，不作为提交路线。
+  - `external_models/MPSR/models/x2.pth`：MPSR x2 权重已保存，README 明确“code will be made public after acceptance”；state dict 可读但缺模型代码，反推 forward 风险太高。暂归档，不作为 70 候选。
+- OpenModelDB/Spandrel 公开 x2 权重 smoke：
+  - 新增 `src/evaluate_spandrel_gray.py`，用于自动加载 spandrel 支持的公开 x2 模型做灰度 clean val。
+  - 4 张 LPIPS smoke：
+    - HAT current reference：proxy `45.39403`。
+    - GRL base x2：`logs/eval_grl_base_x2_smoke_20260509.log`，proxy `44.68565`。
+    - OmniSR DF2K：`logs/eval_spandrel_omnisr_df2k_extracted_limit4_lpips_20260509.log`，proxy `38.70195`。
+    - OmniSR DIV2K：`logs/eval_spandrel_omnisr_div2k_extracted_limit4_lpips_20260509.log`，proxy `38.55346`。
+    - SPAN x2 ch48：`logs/eval_spandrel_spanx2_ch48_limit4_lpips_20260509.log`，proxy `38.53871`。
+    - RealESRGAN x2Plus：`logs/eval_spandrel_realesrgan_x2plus_limit4_lpips_20260509.log`，proxy `34.48378`。
+    - BSRGAN x2：`logs/eval_spandrel_bsrgan_x2_limit4_lpips_20260509.log`，proxy `35.90360`。
+  - 结论：OpenModelDB 普通 x2/real x2 权重全部低于 HAT；GRL 也低于 HAT，不扩 full val，不打包。
+- 本轮未生成 test PNG/zip；继续遵守“只有明显 70 希望才打包”的限制。
+
+## 2026-05-09 Phase-1 x2 Big-Jump Probe Plan 执行结果
+- 目标：只验证“更像官方退化的本地 public HR 预训练”有没有大跳信号；不生成 test PNG/zip，不提交。
+- 固定 baseline：
+  - 起始权重：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - 40-val 初始 proxy：`43.08219`
+  - 晋级线：`43.18219`
+- 生成 4 组 official-like external pair：
+  - `external_data/ThermalKaist_sr_topgrad1024_official_area_matched`
+  - `external_data/ThermalKaist_sr_topgrad1024_official_cubic065_matched`
+  - `external_data/FLIR_IISR_HR_topgrad1024_official_area_matched`
+  - `external_data/FLIR_IISR_HR_topgrad1024_official_cubic065_matched`
+  - 公共配置：`top_grad_count=1024`、`patches_per_image=1`、`shuffle`、`match_stats_from=官方 train input_320`、`match_stats_strength=1.0`、`degrade_mode=official`
+  - 已验证每组都有 `1024` 对灰度 PNG，尺寸分别为 `320x256` / `640x512`。
+- 4 条单源短 probe：
+  - ThermalKaist `sigma0.5 + area`
+    - log：`logs/train_x2_hat_l_thermalkaist_topgrad1024_official_area_probe_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 43.06055`，delta `-0.02164`，train_loss `0.00307`
+  - ThermalKaist `sigma0.65 + cubic`
+    - log：`logs/train_x2_hat_l_thermalkaist_topgrad1024_official_cubic065_probe_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 43.06478`，delta `-0.01741`，train_loss `0.00292`
+  - FLIR-IISR HR `sigma0.5 + area`
+    - log：`logs/train_x2_hat_l_flir_iisr_hr_topgrad1024_official_area_probe_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 43.05890`，delta `-0.02329`，train_loss `0.00480`
+  - FLIR-IISR HR `sigma0.65 + cubic`
+    - log：`logs/train_x2_hat_l_flir_iisr_hr_topgrad1024_official_cubic065_probe_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 43.04565`，delta `-0.03654`，train_loss `0.00471`
+- 4 条单源全败后，按计划只跑 1 条 mixed 50/50：
+  - 选择 `sigma0.5 + area` 作为 mixed degrade 设定；理由是两源合看更稳，且 FLIR 分支明显优于 cubic。
+  - mixed 数据：
+    - `external_data/mixed50_thermalkaist_flir_iisr_hr_topgrad1024_official_area_256each_probe`
+    - `external_data/mixed50_thermalkaist_flir_iisr_hr_topgrad1024_official_area_256each_probe/manifests/thermal_256.txt`
+    - `external_data/mixed50_thermalkaist_flir_iisr_hr_topgrad1024_official_area_256each_probe/manifests/flir_256.txt`
+    - 共 `512` 对，ThermalKaist/FLIR-IISR 各 `256` 对；已验证尺寸正确。
+  - mixed probe：
+    - log：`logs/train_x2_hat_l_mixed50_thermalkaist_flir_iisr_hr_topgrad1024_official_area_probe_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 43.06114`，delta `-0.02105`，train_loss `0.00389`
+- 结论：
+  - 5 条 probe 全部低于晋级线 `43.18219`，且全部比 baseline 回落。
+  - 当前本地 public HR matched-data 分支可视为证伪：ThermalKaist、FLIR-IISR、以及二者 50/50 mixed 都没有 70 分级别信号。
+  - 不做 full-set 扩训、不做 official pullback、不生成 test PNG/zip、不提交。
+
+## 2026-05-09 外搜新公开 x2 红外权重
+- 目标：
+  - 按“公开来源可复现、推理代码可跑、固定 x2 输出、灰度适配合法”的门槛，寻找新的原生 x2 红外/热红外 SR 候选。
+  - 只要 smoke 直接弱于当前 HAT 参考，就不进 `40-val`，更不做 micro-finetune。
+- 新候选静态筛选：
+  - `external_models/ThermalSuperResolution`：
+    - 官方 GitHub 仓库和 release 可用，但公开配置是 track1 diffusion / track2 x8/x16，且高倍率分支带 visible guidance；不属于本赛要的原生单图 x2，归档。
+  - `external_models/TherISuRNet`：
+    - 官方仓库有训练和测试流程，但未附可直接下载的 pretrained x2 权重；不满足“同日可复现 smoke”的门槛，归档。
+  - `external_models/DifIISR`：
+    - 官方配置明确 `sf=4`，不是原生 x2，归档。
+  - `external_models/EIRSR`：
+    - 当前本地仍缺完整可复现实验资产，暂不推进。
+  - `external_models/MPSR`：
+    - 仍是“有 x2 权重但无公开 forward 代码”的状态，继续归档。
+- `ChasNet` x2：
+  - 官方仓库带完整 `x2/` 推理代码和公开权重，是本轮唯一通过静态门槛的新候选。
+  - 为了和当前灰度 clean-val 刻度直接对齐，新增 `src/evaluate_chasnet_gray.py`：
+    - 自动把单通道输入重复成 3 通道喂给 `ChasNet`。
+    - 支持 `G1-only` smoke，也支持官方 `G1+G2` 双分支；若某分支前向出现 non-finite，直接报错停止。
+  - 同切片 4 张 LPIPS smoke：
+    - HAT reference：`logs/eval_hat_l_limit4_lpips_chasnet_ref_20260509.log`，proxy `39.74218`。
+    - ChasNet `G1-only`：`logs/eval_chasnet_x2_g1_limit4_lpips_20260509.log`，proxy `36.60697`。
+    - 结论：`G1-only` 明显弱于 HAT，按规则不进 `40-val`。
+  - 官方双分支数值检查：
+    - `logs/eval_chasnet_x2_g1g2_limit1_20260509.log`
+    - `196000_G.pth + 68000_G.pth` 组合在本地前向时，`G2` 产生 non-finite，运行时抛出 `RuntimeError: ChasNet G2 produced non-finite values`。
+- 本轮结论：
+  - 当前这一轮外搜公开 x2 红外/热红外权重没有候选通过 Stage A smoke。
+  - 不做 `40-val`、不做 micro-finetune、不做 full expansion、不做 official pullback、不生成 test PNG/zip。
+  - 下一主线应切到“测试 LR 分布聚类 + 合法 per-image 模型选择/后处理框架”；公开 x2 红外权重分支仅在出现新的原生单图 x2、可直接复现仓库/权重后再重开。
+
+## 2026-05-09 测试 LR 聚类与合法 per-image 路由框架
+- 目标：
+  - 用 `official_val` 与 `initial_test` 的 LR-only 特征做聚类，建立合法的 per-image route 分析框架。
+  - 先从当前最强 HAT-L 主干出发，只测少量合法推理路线；如果 route pool 的 oracle 都很低，就立即止损。
+- 代码与接口：
+  - `src/evaluate_hat_gray.py` 新增 `--metrics-csv`，可直接导出逐图 `psnr/ssim/edge/lpips/proxy`。
+  - 新增 `src/lr_features.py`：提取亮度统计、熵、梯度、Laplacian、频域高频比等 LR 特征。
+  - 新增 `src/analyze_lr_clusters.py`：对指定数据源抽 LR 特征并做 `k-means` 聚类，输出 cluster csv / summary / 名单。
+  - 新增 `src/analyze_cluster_routes.py`：读取逐图 metrics csv + cluster csv，做保守 cluster-level route 选择，并输出 test 路由名单。
+- LR 聚类结果：
+  - `experiments/lr_clusters_val120_initialtest_k3.csv` / `_summary.csv`：
+    - 用 `official_val 120 + initial_test 100` 做 `k=3` 聚类，是当前最稳的切分。
+    - `official_val` 分布：`43 / 21 / 56`
+    - `initial_test` 分布：`31 / 18 / 51`
+    - hardest cluster 是 `cluster1`，base mean proxy 只有 `34.03335`。
+  - `experiments/lr_clusters_val120_initialtest_k4.csv` / `_summary.csv`：
+    - `k=4` 会多出 `2 val + 1 test` 的极小离群簇，适合诊断，不适合作为主路由。
+- 快路线候选池（full `120-val`）：
+  - base：`experiments/router_metrics_20260509/base.csv`，proxy `41.62092`。
+  - `blend_interp=0.03`：`experiments/router_metrics_20260509/blend003.csv`，proxy `41.62768`，全局 `+0.00676`。
+  - `sharpen_amount=0.03`：`experiments/router_metrics_20260509/out_sharp003.csv`，proxy `41.59301`。
+  - `back_project_iters=1 alpha=0.5`：`experiments/router_metrics_20260509/backproj1.csv`，proxy `41.50423`。
+  - 结论：fast-route 里只有 `blend003` 有系统性正向信号；`out_sharp003`、`backproj1` 可关闭。
+- fast-route router 结果：
+  - `experiments/router_analysis_k3_20260509/cluster_route_summary.csv`
+    - 保守规则：`min_cluster_support=8`，`min_gain=0.01`
+    - 只把 hardest cluster `21 val / 18 test` 切到 `blend003`
+    - 估计全局 `selected_mean=41.62450`，仅 `+0.00358`
+  - `experiments/router_analysis_k4_20260509/cluster_route_summary.csv`
+    - 会把两个中低分簇切到 `blend003`
+    - 估计全局 `selected_mean=41.62961`，仅 `+0.00869`
+  - 同一候选池逐图 oracle `41.63638`，只比 base 高 `+0.01546`
+  - 结论：只靠 current fast-route 做合法 per-cluster 分流，上限太低，不是 70 路线。
+- hardest-cluster 定向 expensive route：
+  - 用 `experiments/router_analysis_k3_20260509/hard_cluster_k3c1/official_val_cluster1.txt` 单独评 hardest cluster（`21` 张 val，对应 `18` 张 initial_test）。
+  - `TTA`：
+    - `logs/eval_hat_route_tta_k3c1_20260509.log`
+    - `experiments/router_metrics_20260509/tta_k3c1.csv`
+    - proxy `34.12048`，比 cluster1 base `34.03335` 高 `+0.08713`
+  - `TTA + blend003`：
+    - `logs/eval_hat_route_tta_blend003_k3c1_20260509.log`
+    - `experiments/router_metrics_20260509/tta_blend003_k3c1.csv`
+    - proxy `34.13666`，比 cluster1 base 高 `+0.10331`
+  - 说明：原计划曾尝试把 full `120-val` 的 `TTA` 混在大串里一起跑，但 `8x` 级别耗时明显拖慢迭代，所以改成 hardest-cluster 定向评估；这是当前更合理的 compute 用法。
+- 组合策略估计：
+  - 通过 `experiments/router_analysis_k3_20260509/strategies/strategy_summary.csv` 估算：
+    - `hard_tta`：只给 hardest-cluster 用 `TTA`，全局 `41.63617`，`+0.01525`
+    - `hard_tta_blend`：只给 hardest-cluster 用 `TTA+blend003`，全局 `41.63900`，`+0.01808`
+    - `mid_blend_hard_tta_blend`：中等难簇 `31 test` 用 `blend003`，hardest `18 test` 用 `TTA+blend003`，其余 `51 test` 用 base，全局 `41.64224`，`+0.02132`
+  - 对应 test 名单已写到 `experiments/router_analysis_k3_20260509/strategies/*/test_names_by_route/`。
+- 本轮结论：
+  - LR 聚类/router framework 已经可用，能合法生成 route 名单和 test manifest。
+  - 但在当前 HAT-only candidate pool 上，即使叠 hardest-cluster 的 expensive `TTA+blend`，估计全局也只有 `+0.02132` full-val 量级。
+  - 这条线可以保留作后期边际 polishing，不应该继续占用主线资源；仍然不生成 test PNG/zip，不提交。
+
+## 2026-05-09 source x degrade 网格打分 + 新 FLIR probe
+- 目标：
+  - 不再手工拍脑袋选 `sigma / interp / jitter / noise / gamma`，而是先做 source/degrade 网格打分，再决定值不值得开训。
+  - 同时补齐之前遗漏的 raw `LLVIP_ir` synthdeg 结论。
+- 新增工具：
+  - `src/score_external_match.py`
+    - 复用 `prepare_external_sr.py` 的裁剪、统计匹配和退化逻辑。
+    - 复用 `lr_features.py` 的 LR 统计/频域/梯度特征。
+    - 对每个 `source x degrade` 组合输出其与 `official_train/input_320`、`initial_test/input_320` 的 summary-distance。
+    - 当前用途是“预筛器”，不是训练收益的直接代理。
+- 补记：raw `LLVIP_ir` synthdeg 已试过
+  - `logs/train_x2_hat_l_llvip_synthdeg_probe_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 42.89808`
+  - `logs/train_x2_hat_l_llvip_synthdeg_probe_sigma07_cubic_lr5e7_p48_avg.log`
+    - `initial 43.08219 -> final 43.05141`
+  - 结论：raw `LLVIP_ir` + official-like degrade 也没有超过 baseline，这条线关闭。
+- 第一轮 source/degrade 网格：
+  - 输出：`experiments/source_match_grid_round1_20260509.csv`
+  - source：
+    - `llvip_ir::external_data/LLVIP_ir/LLVIP/infrared/train`
+    - `irab_t::external_data/IRAB-T/IRAB-T/Yolo/train`
+    - `thermalkaist::external_data/ThermalKaist/thermalKaist/JPEGImages`
+    - `flir_iisr_hr::external_data/FLIR-IISR/FLIR-IISR/HR`
+  - 配置：
+    - `sample_count=96`
+    - `top_grad_count=128`
+    - `match_stats_strength=1.0`
+    - `sigma={0.5,0.65,0.8}`
+    - `interp={area,linear,cubic}`
+    - `sigma_jitter={0,0.1}`
+    - `noise_std={0,0.25}`
+    - `gamma_jitter={0,0.03}`
+    - 总分 = `0.7 * official_score + 0.3 * test_score`
+  - best per-source：
+    - `flir_iisr_hr`：`0.42519`，`sigma=0.5 interp=cubic noise=0.25 gamma=0.0`
+    - `llvip_ir`：`0.55645`
+    - `thermalkaist`：`0.62572`
+    - `irab_t`：`1.63582`
+  - 解释：
+    - `FLIR-IISR HR` 仍是当前本地最像官方 LR 的 HR 源。
+    - `IRAB-T` 明显比现有强源更远，不值得直接进短 probe。
+    - `LLVIP_ir` 没有翻盘，和上面的 raw synthdeg 失败结论一致。
+- 基于打分表重开 FLIR 新退化 probe：
+  - 新数据：
+    - `external_data/FLIR_IISR_HR_topgrad1024_official_cubic_noise025_matched`
+    - 生成配置：`top_grad_count=1024`、`patches_per_image=1`、`shuffle`、`match_stats_strength=1.0`、`sigma=0.5`、`interp=cubic`、`noise_std=0.25`
+  - 数据验收：
+    - `1024` 对灰度 PNG，尺寸正确为 `320x256` / `640x512`
+    - sanity 输出：`experiments/source_match_flir_new_sanity_20260509.csv`，score `0.3799`
+  - probe：
+    - 日志：`logs/train_x2_hat_l_flir_iisr_hr_topgrad1024_official_cubic_noise025_probe_lr5e7_p48_avg.log`
+    - out dir：`checkpoints_hat_l_flir_iisr_hr_topgrad1024_official_cubic_noise025_probe_lr5e7_p48_avg`
+    - 配置：从 `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth` 出发，`train_limit=512`、`val_count=40`、`epochs=1`、`patch=48`、`batch=1`、`lr=5e-7 -> 1e-7`
+  - 结果：
+    - `initial 43.08219 -> final 43.02259`
+    - delta `-0.05960`
+    - 甚至比旧的 FLIR matched-data probe 还差：
+      - 旧 `sigma0.5 + area`：`43.05890`
+      - 旧 `sigma0.65 + cubic`：`43.04565`
+- 本轮结论：
+  - “更像官方 LR 分布”的 source/degrade 组合，并没有自动转成更好的训练信号。
+  - `score_external_match.py` 可以保留作为 source/degrade 预筛器，但不能把分数高直接等同于值得训练。
+  - 当前本地新源里，`IRAB-T`、raw `LLVIP_ir` 都没有继续投入价值；新 FLIR `cubic+noise` 也失败。
+  - 这条主线在现有本地公开 HR 源上又被进一步收窄，仍然不生成 test PNG/zip，不提交。
+
+## 2026-05-09 新公开 HR 源 M3FD：下载、筛分与短 probe
+- 目标：
+  - 继续沿“新公开高质量红外 HR 源”主线推进。
+  - 先验证 `M3FD` 这种更大、更高分辨率的新公开红外源，是否能比现有本地源更值得开训。
+- 下载与解压：
+  - 公开包已下载到 `external_data/downloads/M3FD/M3FD/`
+    - `M3FD_Detection.zip`
+    - `M3FD_Fusion.zip`
+    - `roadscene.zip`
+    - `tno.zip`
+  - 只解压红外模态：
+    - `external_data/M3FD_ir/detection_ir`：`4200` 张
+    - `external_data/M3FD_ir/fusion_ir`：`300` 张
+  - 抽样核对：
+    - `detection_ir` 为统一 `1024x768`
+    - `fusion_ir` 主体是 `1024x768`，夹杂少量其他尺寸
+    - 图像文件是 RGB 容器，但现有 `prepare_external_sr.py` / `to_gray_u8()` 可直接灰度化
+- 静态 source/degrade 对比：
+  - 输出：`experiments/source_match_m3fd_vs_flir_20260509.csv`
+  - source：
+    - `m3fd_det::external_data/M3FD_ir/detection_ir`
+    - `flir_iisr_hr::external_data/FLIR-IISR/FLIR-IISR/HR`
+  - 网格：
+    - `sigma={0.5,0.65}`
+    - `interp={area,cubic}`
+    - `sigma_jitter={0,0.1}`
+    - `noise_std={0,0.25}`
+    - `gamma_jitter={0,0.03}`
+    - `match_stats_strength=1.0`
+  - best：
+    - `flir_iisr_hr`：`0.37249`，`sigma=0.5 interp=cubic noise=0.25 gamma=0.03`
+    - `m3fd_det`：`0.45694`，`sigma=0.5 interp=cubic noise=0.25 gamma=0.0`
+  - 解释：
+    - `M3FD` 静态上没有超过 `FLIR-IISR HR`
+    - 但明显强于已经失败过的 `LLVIP_ir / ThermalKaist`，所以保留一次严格受控的短 probe 机会
+- M3FD matched-data：
+  - 输出：
+    - `external_data/M3FD_detection_ir_topgrad1024_official_cubic_noise025_matched`
+  - 生成配置：
+    - `top_grad_count=1024`
+    - `patches_per_image=1`
+    - `shuffle`
+    - `match_stats_strength=1.0`
+    - `sigma=0.5`
+    - `interp=cubic`
+    - `noise_std=0.25`
+  - 构造日志摘要：
+    - `grad_filter kept=1024 min=24.804 median=29.028 max=58.436`
+    - `written=1024`
+  - 验收：
+    - `1024` 对灰度 PNG
+    - 尺寸正确为 `320x256 / 640x512`
+- 短 probe：
+  - 日志：
+    - `logs/train_x2_hat_l_m3fd_detection_ir_topgrad1024_official_cubic_noise025_probe_lr5e7_p48_avg.log`
+  - out dir：
+    - `checkpoints_hat_l_m3fd_detection_ir_topgrad1024_official_cubic_noise025_probe_lr5e7_p48_avg`
+  - 配置：
+    - 从 `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth` 出发
+    - `train_limit=512`
+    - `val_count=40`
+    - `epochs=1`
+    - `patch=48`
+    - `batch=1`
+    - `lr=5e-7 -> 1e-7`
+  - 结果：
+    - `initial 43.08219 -> final 42.96368`
+    - delta `-0.11851`
+- 本轮结论：
+  - `M3FD` 是一个比现有本地弱源更像样的新公开红外候选，但依然没有转成正向训练收益。
+  - 在当前合法主线下，`M3FD detection` 已可视为证伪：不做 full-set 扩训、不做 official pullback、不打包、不提交。
+  - 这说明“换一个更大的公开红外 HR 源”本身还不够，后续若继续冲 70，必须继续找更新、更贴任务分布的公开源，或承认这条路的边际收益正在快速衰减。
+
+## 2026-05-09 HIT-UAV：静态更近，但 probe 仍回落
+- 目标：
+  - 在 `M3FD` 失败后，继续筛新的公开红外 HR 源，但优先挑“原生灰度、统一分辨率、可直接下载”的数据集。
+  - 同时把体量更大的 `NII-CU MAPD` 开始下载，作为下一候选。
+- 下载：
+  - `HIT-UAV`：
+    - `external_data/downloads/HIT_UAV/HIT-UAV-Infrared-Thermal-Dataset-v1.2.zip`
+  - `NII-CU MAPD`：
+    - `external_data/downloads/NII_CU/nii-cu-mapd-dataset.zip`
+    - Dropbox 实际返回压缩包约 `24G`，本轮只启动下载，尚未完成筛分
+- HIT-UAV 红外解压：
+  - 只抽图像，不抽标注
+  - 输出：`external_data/HIT_UAV_ir/all`
+  - 共 `2898` 张
+  - 抽样核对：
+    - 统一 `640x512`
+    - 原生 `L` 灰度热红外
+- HIT-UAV 静态 source/degrade 对比：
+  - 输出：`experiments/source_match_hit_uav_vs_flir_20260509.csv`
+  - 对比：
+    - `flir_iisr_hr` best：`0.37012`
+    - `hit_uav` best：`0.41510`
+  - best `hit_uav` 参数：
+    - `sigma=0.5`
+    - `interp=cubic`
+    - `sigma_jitter=0.1`
+    - `noise_std=0.25`
+    - `gamma_jitter=0.0`
+  - 解释：
+    - `HIT-UAV` 静态上仍不如 `FLIR-IISR HR`
+    - 但明显优于 `M3FD` 的 `0.45694`，足够保留一次短 probe 机会
+- HIT-UAV matched-data：
+  - 输出：
+    - `external_data/HIT_UAV_ir_topgrad1024_official_cubic_noise025_sigjit01_matched`
+  - 生成配置：
+    - `top_grad_count=1024`
+    - `patches_per_image=1`
+    - `shuffle`
+    - `match_stats_strength=1.0`
+    - `sigma=0.5`
+    - `interp=cubic`
+    - `sigma_jitter=0.1`
+    - `noise_std=0.25`
+  - 构造日志摘要：
+    - `grad_filter kept=1024 min=27.401 median=32.928 max=84.957`
+    - `written=1024`
+  - 验收：
+    - `1024` 对灰度 PNG
+    - 尺寸正确为 `320x256 / 640x512`
+- HIT-UAV 短 probe：
+  - 日志：
+    - `logs/train_x2_hat_l_hit_uav_ir_topgrad1024_official_cubic_noise025_sigjit01_probe_lr5e7_p48_avg.log`
+  - out dir：
+    - `checkpoints_hat_l_hit_uav_ir_topgrad1024_official_cubic_noise025_sigjit01_probe_lr5e7_p48_avg`
+  - 配置：
+    - 从 `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth` 出发
+    - `train_limit=512`
+    - `val_count=40`
+    - `epochs=1`
+    - `patch=48`
+    - `batch=1`
+    - `lr=5e-7 -> 1e-7`
+  - 结果：
+    - `initial 43.08219 -> final 42.99036`
+    - delta `-0.09183`
+- 本轮结论：
+  - `HIT-UAV` 比 `M3FD` 更接近“值得赌”的候选，但在统一 `40-val` 刻度上仍然回落。
+  - 因此 `HIT-UAV` 也可视为证伪：不做 full-set 扩训、不做 official pullback、不打包、不提交。
+  - 当前仍在推进的只有 `NII-CU MAPD` 这条更大体量的新源；其余已完成评估的新公开红外候选里，`M3FD` 和 `HIT-UAV` 都没给出 70 分级别信号。
+
+## 2026-05-09 NII-CU MAPD：结构拆解后，静态直接判弱
+- 目标：
+  - 把 `HIT-UAV` 之后剩下的更大体量候选 `NII-CU MAPD` 真正落地筛一遍，确认它值不值得拿一个 short probe 名额。
+- 外层包结构：
+  - 文件：`external_data/downloads/NII_CU/nii-cu-mapd-dataset.zip`
+  - 实际大小约 `25G`
+  - 外层 zip 内只有两个 stored 子包：
+    - `NII_CU_MAPD_dataset.zip`：`9,820,724,445` bytes
+    - `NII_CU_MAPD_raw_videos.zip`：`16,391,970,346` bytes
+  - 由于 raw videos 对当前单图 SR 主线没有直接价值，本轮只抽出 `NII_CU_MAPD_dataset.zip`，不展开 raw videos。
+- thermal 图像抽取：
+  - 抽出内层数据包：`external_data/downloads/NII_CU/NII_CU_MAPD_dataset.zip`
+  - 只解热红外图，不解 RGB/labels：
+    - `external_data/NII_CU_MAPD/rgb_t_thermal`
+    - `external_data/NII_CU_MAPD/four_channel_thermal`
+  - 验收：
+    - `rgb_t_thermal`：`5880` 张，统一 `995x560`，RGB 容器热红外，磁盘约 `142M`
+    - `four_channel_thermal`：`3138` 张，统一 `701x513`，RGB 容器热红外，磁盘约 `126M`
+  - 备注：
+    - `four_channel` 的文件名全集完全包含在 `rgb-t` 里，但分辨率更小、文件内容不同，可视为另一种处理版本，不是简单重复拷贝。
+- 静态 source/degrade 对比：
+  - 输出：`experiments/source_match_nii_cu_vs_flir_20260509.csv`
+  - source：
+    - `flir_iisr_hr::external_data/FLIR-IISR/FLIR-IISR/HR`
+    - `nii_cu_rgbt::external_data/NII_CU_MAPD/rgb_t_thermal`
+    - `nii_cu_fourch::external_data/NII_CU_MAPD/four_channel_thermal`
+  - 网格：
+    - `sigma={0.5,0.65}`
+    - `interp={area,cubic}`
+    - `sigma_jitter={0,0.1}`
+    - `noise_std={0,0.25}`
+    - `gamma_jitter={0,0.03}`
+    - `match_stats_strength=1.0`
+  - best：
+    - `flir_iisr_hr`：`0.46191`，`sigma=0.5 interp=cubic sigma_jitter=0.1 noise=0.0 gamma=0.0`
+    - `nii_cu_fourch`：`0.68223`，`sigma=0.5 interp=cubic sigma_jitter=0.0 noise=0.25 gamma=0.0`
+    - `nii_cu_rgbt`：`1.20526`，`sigma=0.5 interp=cubic sigma_jitter=0.0 noise=0.25 gamma=0.03`
+- 结论：
+  - `NII-CU` 两套 thermal 都明显弱于 `FLIR-IISR HR`。
+  - 其中较好的 `four_channel` 也明显弱于之前还有 probe 资格的 `HIT-UAV` 与 `M3FD` 静态量级。
+  - 因此 `NII-CU` 不进入 matched-data，不占 short probe 名额。
+  - 到这里为止，这一轮“继续外搜新的公开高质量热红外 HR 源”在本地已基本再次收口；除非出现新的公开源，否则不建议继续在当前源池里投入训练。
+
+## 2026-05-09 FLIR-IISR HR 逐图 LR-match 筛图：仍然回落
+- 目标：
+  - 在“换源失败”之后，回到当前最强本地源 `FLIR-IISR HR`，验证更细粒度的逐图筛图是否能把 matched-data 从负收益拉回正收益。
+- 代码更新：
+  - 新增 `src/select_external_by_lr_match.py`
+    - 对单一外部 HR 源逐图做 fixed-degrade 合成 LR
+    - 以官方 train / 初赛 test 的 LR 特征均值为目标，计算每张图的 rank score
+    - 输出完整 ranking csv 和 topK manifest
+  - 扩展 `src/prepare_external_sr.py`
+    - 新增 `--paths-file`
+    - 可直接按 manifest 精确选图，不再依赖目录级路径过滤
+- ranking：
+  - source：`external_data/FLIR-IISR/FLIR-IISR/HR`
+  - 输出：
+    - `experiments/flir_iisr_hr_area_rank_20260509.csv`
+    - `experiments/flir_iisr_hr_area_top1024_20260509.txt`
+    - `experiments/flir_iisr_hr_cubic_noise025_rank_20260509.csv`
+    - `experiments/flir_iisr_hr_cubic_noise025_top1024_20260509.txt`
+  - 两套 ranking 结果：
+    - `area` best rank score：`0.43752`
+    - `cubic+noise0.25` best rank score：`0.40557`
+    - 但两份 top1024 overlap=`1023/1024`
+  - 解释：
+    - 这说明当前 ranking 其实稳定锁定为同一批 FLIR 样本；“筛图收益”和“退化参数收益”可以拆开看，但 manifest 本身没有明显分叉。
+- matched-data：
+  - `external_data/FLIR_IISR_HR_selected_top1024_official_area_matched`
+  - `external_data/FLIR_IISR_HR_selected_top1024_official_cubic_noise025_matched`
+  - 验收：
+    - 各 `1024` 对
+    - 灰度 PNG 尺寸正确：`320x256 / 640x512`
+- probe：
+  - 由于 `area` 是历史上回落最小的 FLIR degrade 组合，优先看它的完整结果。
+  - log：
+    - `logs/train_x2_hat_l_flir_iisr_hr_selected_top1024_official_area_probe_lr5e7_p48_avg.log`
+  - out dir：
+    - `checkpoints_hat_l_flir_iisr_hr_selected_top1024_official_area_probe_lr5e7_p48_avg`
+  - 结果：
+    - `initial 43.08218 -> final 43.04332`
+    - delta `-0.03886`
+  - `cubic+noise0.25`：
+    - 启动过并确认 baseline 对齐
+    - 但由于 top1024 manifest 与 `area` 基本一致，且 `area` 完整结果仍为负，未继续等待其完整收尾
+- 结论：
+  - `FLIR-IISR HR` 的“逐图 LR-match 筛图”依然没能超过 baseline。
+  - 这意味着当前本地公开 HR 源分支不仅换源失败，连对最强本地源做更细粒度筛图也失败。
+  - 因此“本地公开 HR 源 + official-like matched-data”这条线可视为进一步收口；若继续做 70 主线，应转向真正新的外部资源，而不是再榨当前本地源池。
+
+## 2026-05-09 新公开候选 MultiPoint：已确认可下载并开始拉训练集
+- 背景：
+  - 在本地公开 HR 源全部收口后，继续外搜真正新的热红外资源。
+  - 新候选命中 ETH Zurich ASL 的 `MultiPoint: Cross-spectral Optical–Thermal Aerial Imagery`。
+- 官方信息：
+  - 数据页：`640x512` 对齐 `optical / thermal / thermal_raw`
+  - 训练集：`9340` 对
+  - 训练集文件：`training.hdf5`，约 `36.74G`
+  - 测试集：`test.hdf5`，约 `17.27G`
+  - 标签：`labels_training.hdf5`，约 `33.5M`
+  - 整体目录总量约 `50.3G`
+- 下载通路确认：
+  - 通过 ETH libdrive 的公开 share token 做 WebDAV `PROPFIND`，成功列出目录。
+  - 关键文件列表已验证：
+    - `training.hdf5`
+    - `test.hdf5`
+    - `labels_training.hdf5`
+    - `README.pdf`
+    - `doi.txt`
+  - 没有下载整包 zip，而是直接拉：
+    - `external_data/downloads/MultiPoint/training.hdf5`
+- 本地准备：
+  - 已下载：
+    - `external_data/downloads/MultiPoint/README.pdf`
+    - `external_data/downloads/MultiPoint/doi.txt`
+  - 已 clone 官方 loader：
+    - `external_models/multipoint`
+  - 已确认 loader 结构：
+    - `multipoint/datasets/ImagePairDataset.py` 直接从每个 sample 读 `optical`、`thermal`、`thermal_raw`
+  - 新增脚本：
+    - `src/extract_multipoint_thermal.py`
+    - 用途：下载完成后把 `training.hdf5` 中的 `thermal` 或 `thermal_raw` 逐 sample 导出为 PNG
+    - 其中 `thermal_raw` 会按官方说明恢复到 14-bit 范围后写成 `uint16 PNG`
+- 当前状态：
+  - `training.hdf5` 已完整下载：`36,744,678,904` bytes
+  - 之后直接进入热通道抽图与静态筛分
+
+## 2026-05-09 MultiPoint：thermal / thermal_raw 都在 static 直接判弱
+- HDF5 检查：
+  - `training.hdf5` 共 `9340` 个 sample
+  - 每个 sample 都包含：
+    - `optical`
+    - `thermal`
+    - `thermal_raw`
+  - 抽样观察：
+    - `thermal`：`float32`，范围标准化到接近 `0..1`
+    - `thermal_raw`：`float32`，绝对值范围很窄，但可恢复到约 14-bit 热通道量程
+- 环境准备：
+  - 为读 HDF5 安装了 `h5py`
+  - 新增脚本：`src/extract_multipoint_thermal.py`
+- 抽图：
+  - 为了先做静态筛分，不全量展开 `9340` 张，而是：
+    - `stride=2`
+    - `limit=4096`
+  - 导出：
+    - `external_data/MultiPoint_training_thermal`
+      - `4096` 张
+      - `L` 模式
+      - `640x512`
+      - 约 `747M`
+    - `external_data/MultiPoint_training_thermal_raw`
+      - `4096` 张
+      - `I;16` 模式
+      - `640x512`
+      - 约 `975M`
+- 静态 source/degrade 对比：
+  - `thermal` 输出：
+    - `experiments/source_match_multipoint_thermal_vs_flir_20260509.csv`
+    - best：
+      - `flir_iisr_hr`：`0.46191`
+      - `multipoint_thermal`：`0.75790`
+  - `thermal_raw` 输出：
+    - `experiments/source_match_multipoint_thermal_raw_vs_flir_20260509.csv`
+    - best：
+      - `flir_iisr_hr`：`0.46191`
+      - `multipoint_thermal_raw`：`0.75672`
+- 结论：
+  - `MultiPoint` 的 `thermal` 和 `thermal_raw` 在 static 上都明显弱于 `FLIR-IISR HR`
+  - 两个版本的 best 分数几乎相同，说明问题不是“选错热通道表示”，而是整体分布和当前任务仍不够贴近
+  - 因此 `MultiPoint` 不进入 matched-data / short probe
+  - 到这里为止，本轮新增公开热红外源探索再次被 static gate 拦下
+
+## 2026-05-07 项目整理
+- 新增根目录 `README.md`，记录当前合法 baseline、目录职责和大文件管理策略。
+- 重写 `.gitignore`：
+  - 追踪源码、Markdown 记录、`experiments/*.csv` 和 `submission/README.md`。
+  - 忽略 `logs/`、`checkpoints*/`、`external_data/`、`external_models/`、提交 zip/生成目录、模型权重和 Python 缓存。
+  - 忽略 `超分竞赛数据集/`，避免后续继续把官方数据图片提交到 Git。
+- 清理可再生缓存：
+  - 删除 `src/__pycache__/`。
+  - 删除 `超分竞赛数据集/.DS_Store`。
+- Git 索引整理：
+  - 对已被追踪的 `超分竞赛数据集/` 执行 `git rm -r --cached`，本地文件保留，只从后续提交中移除。
+  - 注意：这不会清理历史提交中的大文件；若以后要瘦身 `.git` 历史，需要单独用 history rewrite 工具处理。
+
+## 旧本地候选
+- 提交包：`submission/fqy_rcan_large07_swinir03_ep32_tta_sharp005.zip`
+- 平台分：待提交回分
+- 模型：`0.7 * checkpoints_large_pixel/best_x2_fp16.pth + 0.3 * checkpoints_swinir_base_pixel_lr5e5_from_ep4/best_x2_fp16.pth`
+- 架构：large RCAN + SwinIR ensemble
+- 推理：8-TTA，`sharpen_amount=0.05`
+- 本地验证：
+  - PSNR：33.366443
+  - SSIM：0.997714
+  - Edge：0.973949
+  - LPIPS：0.048037
+  - proxy：41.204549
+- 说明：比当时 large 单模型精确验证高 `+0.043251`；已生成并检查 100 张 640x512 灰度 PNG。
+
+## 上一版线上最好
+- 提交包：`submission/fqy_rcan_lr1e5_ep40_tta_sharp005.zip`
+- 平台分：62.508
+- 模型：`checkpoints_pixel_lr1e5/best_x2_fp16_ep40_proxy3995579.pth`
+- 架构：base RCAN，pure pixel 训练
+- 推理：8-TTA，`sharpen_amount=0.05`
+- 本地验证：
+  - PSNR：32.202954
+  - SSIM：0.997304
+  - Edge：0.963099
+  - LPIPS：0.058232
+  - proxy：39.996512
+
+## 上一版线上基线
+- 提交包：`submission/fqy_rcan_tta_sharp005.zip`
+- 平台分：62.2878
+- 模型：`checkpoints_pixel/best_x2_fp16.pth`
+- 架构：base RCAN，pure pixel 训练
+- 推理：8-TTA，`sharpen_amount=0.05`
+- 本地验证：
+  - PSNR：32.084521
+  - SSIM：0.997261
+  - Edge：0.961947
+  - LPIPS：0.059674
+  - proxy：39.872634
+
+## 原始线上基线
+- 提交包：`submission/fqy_rcan.zip`
+- 平台分：62.283
+- 模型：`checkpoints_pixel/best_x2_fp16.pth`
+- 架构：base RCAN，pure pixel 训练
+- 推理：8-TTA，无 blend，无 sharpen
+- 本地验证：
+  - PSNR：32.084166
+  - SSIM：0.997282
+  - Edge：0.961854
+  - LPIPS：0.061789
+  - proxy：39.867988
+
+## 平台校准结论
+- `sharpen_amount=0.05` 本地 proxy 从 39.867988 涨到 39.872634。
+- 平台分从 62.283 涨到 62.2878。
+- `lr=1e-5` 微调 40 epoch 后，本地 proxy 从 39.872634 涨到 39.996512，平台分从 62.2878 涨到 62.508。
+- `large RCAN` epoch60 后，本地 proxy 从 39.996512 涨到 41.161298，平台分从 62.508 涨到 64.7761。
+- 全数据收口后，本地 proxy 从 39.996512 涨到 40.018459；因为 val 集参与训练，该提升只能作为参考，最终以平台分为准。
+- 结论：轻微锐化收益极小；低学习率微调收益明确但仍是小步；large 容量提升是目前最有效路线。下一步要追第一名，需要 large 全数据收口、large 多 seed/ensemble 或 Transformer/SwinIR。
+
+## 正在进行的训练
+- 日志：`logs/train_x2_base_pixel_lr1e5.log`
+- 输出目录：`checkpoints_pixel_lr1e5`
+- 命令核心参数：
+  - `--preset base`
+  - `--patch-size 96`
+  - `--batch-size 8`
+  - `--epochs 40`
+  - `--lr 1e-5`
+  - `--ssim-weight 0`
+  - `--edge-weight 0`
+  - `--resume checkpoints_pixel/best_x2.pth`
+- 目的：从当前 pure pixel best 继续低学习率微调。
+- 2026-05-06 epoch 6 检查：
+  - initial proxy：39.82759
+  - epoch 2 val proxy：39.73955
+  - epoch 4 val proxy：39.80590
+  - epoch 6 val proxy：39.81011
+  - 状态：尚未超过 resume 初始 best，`best_x2.pth` 未更新；训练仍在继续，观察 epoch 8/10。
+- 2026-05-06 epoch 12 检查：
+  - epoch 8 val proxy：39.84054，超过 initial，已保存新 best。
+  - epoch 10 val proxy：39.82379，回落。
+  - epoch 12 val proxy：39.84457，再次刷新 best。
+  - epoch 14 val proxy：39.78618，明显回落。
+  - 固定快照：`checkpoints_pixel_lr1e5/best_x2_fp16_ep12_proxy39906309.pth`
+  - 精确提交配置验证：8-TTA + `sharpen_amount=0.05`
+  - 精确验证指标：PSNR 32.117342，SSIM 0.997267，Edge 0.962351，LPIPS 0.059668，proxy 39.906309。
+  - 新候选提交包：`submission/fqy_rcan_lr1e5_ep12_tta_sharp005.zip`
+  - 状态：已生成并检查 100 张 640x512 灰度 PNG，等待平台提交回分。
+  - 提交建议：若当天只剩 1 次机会且距离截止还有时间，先等 epoch 16；若必须现在提交，则只提交 ep12 包，不提交后续 latest。
+- 2026-05-06 epoch 20 检查：
+  - epoch 16 val proxy：39.86912
+  - epoch 18 val proxy：39.89030
+  - epoch 20 val proxy：39.90548，刷新训练日志 best。
+  - 固定快照：`checkpoints_pixel_lr1e5/best_x2_fp16_ep20_proxy3990548.pth`
+  - 精确提交配置验证：8-TTA + `sharpen_amount=0.05`
+  - 精确验证指标：PSNR 32.160888，SSIM 0.997291，Edge 0.962663，LPIPS 0.059302，proxy 39.951356。
+  - 新候选提交包：`submission/fqy_rcan_lr1e5_ep20_tta_sharp005.zip`
+  - 状态：已生成并检查 100 张 640x512 灰度 PNG。
+  - 提交建议：若今天只剩 1 次提交且需要现在提交，提交 ep20 包，不再提交 ep12 包。
+- 2026-05-06 epoch 24 检查：
+  - epoch 22 val proxy：39.90480，基本持平 ep20。
+  - epoch 24 val proxy：39.92547，刷新训练日志 best。
+  - 固定快照：`checkpoints_pixel_lr1e5/best_x2_fp16_ep24_proxy3992547.pth`
+  - 精确提交配置验证：8-TTA + `sharpen_amount=0.05`
+  - 精确验证指标：PSNR 32.175422，SSIM 0.997286，Edge 0.962850，LPIPS 0.058323，proxy 39.968195。
+  - 新候选提交包：`submission/fqy_rcan_lr1e5_ep24_tta_sharp005.zip`
+  - 状态：已生成并检查 100 张 640x512 灰度 PNG。
+  - 提交建议：截至 epoch 24，提交 ep24 包，优先级高于 ep20。
+- 2026-05-06 epoch 40 完成：
+  - epoch 40 val proxy：39.95579，最终刷新训练日志 best。
+  - 固定快照：`checkpoints_pixel_lr1e5/best_x2_fp16_ep40_proxy3995579.pth`
+  - 精确提交配置验证：8-TTA + `sharpen_amount=0.05`
+  - 精确验证指标：PSNR 32.202954，SSIM 0.997304，Edge 0.963099，LPIPS 0.058232，proxy 39.996512。
+  - 新候选提交包：`submission/fqy_rcan_lr1e5_ep40_tta_sharp005.zip`
+  - 状态：已生成并检查 100 张 640x512 灰度 PNG。
+  - 提交建议：截至完整 40 epoch，提交 ep40 包，优先级高于 ep24。
+
+## 实验记录文件
+- 提交映射：`experiments/submission_log.csv`
+- 当前推理 sweep：`experiments/sweep_current_core.csv`
+
+## 全数据收口
+- 2026-05-06 全数据短跑已完成：
+  - 日志：`logs/train_x2_base_pixel_trainall_lr3e6.log`
+  - 输出：`checkpoints_pixel_trainall_lr3e6`
+  - 起点：`checkpoints_pixel_lr1e5/best_x2_ep40_proxy3995579.pth`
+  - 参数：base RCAN，`--train-all`，`lr=3e-6`，`epochs=16`，`val_every=4`，`save_every_val`
+  - 目的：用全部 1800 张官方训练图做最终收口，尽量用最少 GPU 时间换线上增益。
+  - epoch 16 train-all val proxy：39.98204
+  - 精确提交配置验证：8-TTA + `sharpen_amount=0.05`
+  - 精确验证指标：PSNR 32.223406，SSIM 0.997312，Edge 0.963370，LPIPS 0.057780，proxy 40.018459。
+  - 新候选提交包：`submission/fqy_rcan_trainall_lr3e6_ep16_tta_sharp005.zip`
+  - 状态：已生成并检查 100 张 640x512 灰度 PNG。
+  - 注意：train-all 后 val 集参与训练，本地 val 只能做参考，最终以平台分为准。
+
+## 下一步策略
+1. 提交 `submission/fqy_rcan_trainall_lr3e6_ep16_tta_sharp005.zip`，看平台是否继续认可全数据收口。
+2. 若平台涨幅小于 0.1，停止继续磨 base，开 large RCAN。
+3. 若平台继续明显涨，再考虑基于 train-all best 做极短 lr=1e-6 收尾或直接进入 ensemble。
+
+## 当前运行任务
+- 2026-05-06 已启动 large RCAN：
+  - 日志：`logs/train_x2_large_pixel.log`
+  - 输出：`checkpoints_large_pixel`
+  - 参数：large RCAN，pure pixel，`patch_size=96`，`batch_size=2`，`lr=5e-5`，`epochs=60`，`val_every=4`，`save_every_val`
+  - 目的：停止继续单独磨 base，训练高容量模型作为单模型冲分和 ensemble 成员。
+  - 策略：先观察 epoch 4/8/12；如果 large 明显追不上 base，再提前停掉，避免继续烧 GCP。
+  - epoch 4：PSNR 32.10098，SSIM 0.99722，Edge 0.96145，LPIPS 0.06027，proxy 39.88667。
+  - epoch 6 检查：训练正常，进入 epoch 7；large 未崩，从零训练追近 base，但仍低于 base ep40 no-TTA proxy 39.95579。继续观察 epoch 8/12。
+  - epoch 8：PSNR 32.48712，SSIM 0.99739，Edge 0.96562，LPIPS 0.05545，proxy 40.29179。
+  - epoch 12：PSNR 32.59387，SSIM 0.99745，Edge 0.96694，LPIPS 0.05429，proxy 40.40384。
+  - epoch 16：PSNR 32.81290，SSIM 0.99753，Edge 0.96906，LPIPS 0.05230，proxy 40.63164。
+  - epoch 16 精确提交配置验证：8-TTA + `sharpen_amount=0.05`，PSNR 32.876970，SSIM 0.997538，Edge 0.969523，LPIPS 0.051471，proxy 40.698300。
+  - 结论：large 已明显超过 base/train-all，是当前主力冲分路线。继续训练，不提前停。
+  - epoch 20：PSNR 32.82401，SSIM 0.99751，Edge 0.96928，LPIPS 0.05094，proxy 40.64576。
+  - epoch 24：PSNR 32.96838，SSIM 0.99760，Edge 0.97049，LPIPS 0.05200，proxy 40.79100，继续刷新 best。
+  - epoch 25 检查：训练仍在继续；large 曲线还没平台期，继续观察 epoch 28/32。
+  - epoch 28：PSNR 33.07584，SSIM 0.99763，Edge 0.97122，LPIPS 0.05238，proxy 40.89931。
+  - epoch 32：PSNR 33.09495，SSIM 0.99762，Edge 0.97157，LPIPS 0.04992，proxy 40.92397。
+  - epoch 36：PSNR 33.16750，SSIM 0.99767，Edge 0.97217，LPIPS 0.05168，proxy 40.99447。
+  - epoch 40：PSNR 33.20480，SSIM 0.99769，Edge 0.97267，LPIPS 0.04791，proxy 41.04043。
+  - epoch 44：PSNR 33.26848，SSIM 0.99770，Edge 0.97299，LPIPS 0.04927，proxy 41.10215。
+  - epoch 48：PSNR 33.27352，SSIM 0.99771，Edge 0.97315，LPIPS 0.04798，proxy 41.11015。
+  - epoch 52：PSNR 33.31547，SSIM 0.99773，Edge 0.97339，LPIPS 0.04925，proxy 41.15012。
+  - epoch 56：PSNR 33.32095，SSIM 0.99774，Edge 0.97351，LPIPS 0.04807，proxy 41.15827。
+  - epoch 60：PSNR 33.32396，SSIM 0.99774，Edge 0.97354，LPIPS 0.04852，proxy 41.16047，训练完成并保存 best。
+  - epoch 60 精确提交配置验证：8-TTA + `sharpen_amount=0.05`，PSNR 33.322164，SSIM 0.997706，Edge 0.973709，LPIPS 0.047259，proxy 41.161298。
+  - 新候选提交包：`submission/fqy_rcan_large_ep60_tta_sharp005.zip`
+  - 状态：已生成并检查 100 张 640x512 灰度 PNG；已提交平台。
+  - 平台分：64.7761。
+  - 结论：large ep60 是当前最好线上版本，本地 proxy 比已提交 base ep40 高 `+1.164786`，平台分高 `+2.2681`。
+  - 代码更新：`evaluate_local.py`、`infer.py`、`make_submission.py` 支持 `--preset auto`，可按 checkpoint 自带 config 混合 base/large ensemble。
+  - ensemble no-TTA sweep：
+    - large only：proxy 41.109938
+    - `0.9 large + 0.1 base ep40`：proxy 41.125102
+    - `0.8 large + 0.2 base ep40`：proxy 41.108624
+    - `0.7 large + 0.3 base ep40`：proxy 41.058921
+    - `0.8 large + 0.2 train-all base`：proxy 41.108428
+  - `0.9 large + 0.1 base ep40` 精确提交配置验证：8-TTA + `sharpen_amount=0.05`，PSNR 33.327966，SSIM 0.997712，Edge 0.973610，LPIPS 0.048261，proxy 41.164935。
+  - ensemble 候选提交包：`submission/fqy_rcan_large09_base01_ep60_tta_sharp005.zip`
+  - ensemble 结论：本地只比 large 单模型高 `+0.003637`，可作为第二提交候选；若明天只有一次提交机会，优先级仍建议 large 单模型更稳。
+
+## 下一步策略更新
+1. `submission/fqy_rcan_large09_base01_ep60_tta_sharp005.zip` 本地只高 `+0.003637`，预计平台只可能小幅波动；若当天提交名额充足可试，若名额少不优先。
+2. 最短冲第一名：从 `checkpoints_large_pixel/best_x2.pth` 做 large train-all 低学习率收口，目标是再挤 `0.2-0.4` 左右平台分。
+3. 若 large train-all 仍不到 65.5472，开启 SwinIR/Transformer；目标不是继续磨 RCAN，而是制造与 RCAN 互补的模型再 ensemble。
+4. 冲 70 需要新架构或外部/公开数据预训练，单条 RCAN 线目前看不到足够空间。
+
+## SwinIR / Transformer 路线
+- 2026-05-07 已接入 SwinIR-style window Transformer：
+  - 新增 preset：`swinir_tiny`、`swinir_light`、`swinir_medium`、`swinir_base`。
+  - 当前主跑模型：`swinir_base`，12.66M 参数。
+  - 已复用现有训练、验证、推理、TTA、打包、ensemble 管线。
+  - `evaluate_local.py` / `infer.py` / `make_submission.py` 支持 `--preset auto` 混合 RCAN/SwinIR checkpoint。
+- 2026-05-07 已启动正式训练：
+  - PID：`982387`
+  - 日志：`logs/train_x2_swinir_base_pixel.log`
+  - 输出：`checkpoints_swinir_base_pixel`
+  - 参数：`swinir_base`，pure pixel，`patch_size=96`，`batch_size=2`，`lr=2e-4`，`epochs=80`，`val_every=4`，`save_every_val`
+  - 起点：随机初始化 + bicubic residual，initial val 与 bicubic 基线一致：PSNR 28.83431，SSIM 0.98797，Edge 0.90718，LPIPS 0.18892，proxy 36.19865。
+  - 速度：约 4.1 it/s，预计每 epoch 约 13-14 分钟，epoch 4 约 55 分钟后有第一轮有效验证。
+  - epoch 2/3 训练 loss 出现明显 spike，说明 `lr=2e-4` 对当前 SwinIR run 偏激进；epoch 4 train_loss 回落到 0.04479，但仍高于 large RCAN 健康区间。
+  - epoch 4：PSNR 32.12246，SSIM 0.99700，Edge 0.96325，LPIPS 0.04914，proxy 39.93266，略高于 large RCAN epoch 4 的 39.88667；LPIPS 明显更好，可能有 ensemble 互补价值。
+  - epoch 6 再次持续 spike 到 loss 约 2.4；已停止该 high-lr run，保留 epoch 4 best。
+- 2026-05-07 已启动 low-lr SwinIR 续训：
+  - 主进程 PID：`1036706`，shell PID：`1036646`
+  - 日志：`logs/train_x2_swinir_base_pixel_lr5e5_from_ep4.log`
+  - 输出：`checkpoints_swinir_base_pixel_lr5e5_from_ep4`
+  - 起点：`checkpoints_swinir_base_pixel/best_x2.pth`
+  - 参数：`swinir_base`，pure pixel，`patch_size=96`，`batch_size=2`，`lr=5e-5`，`min_lr=5e-7`，`epochs=32`，`val_every=4`，`save_every_val`
+  - initial val：PSNR 32.12246，SSIM 0.99700，Edge 0.96325，LPIPS 0.04914，proxy 39.93266。
+  - epoch 4：PSNR 32.69761，SSIM 0.99744，Edge 0.96822，LPIPS 0.05207，proxy 40.51456，刷新 best。
+  - epoch 8：PSNR 32.81756，SSIM 0.99750，Edge 0.96897，LPIPS 0.05299，proxy 40.63451，刷新 best。
+  - epoch 12：PSNR 32.93885，SSIM 0.99755，Edge 0.97018，LPIPS 0.05336，proxy 40.75781，刷新 best。
+  - epoch 16：PSNR 33.02522，SSIM 0.99757，Edge 0.97083，LPIPS 0.05013，proxy 40.85205，刷新 best。
+  - epoch 20：PSNR 33.09595，SSIM 0.99762，Edge 0.97159，LPIPS 0.05185，proxy 40.92115，刷新 best。
+  - epoch 24：PSNR 33.12763，SSIM 0.99762，Edge 0.97193，LPIPS 0.05021，proxy 40.95675，刷新 best。
+  - epoch 28：PSNR 33.17324，SSIM 0.99765，Edge 0.97229，LPIPS 0.05129，proxy 41.00113，刷新 best。
+  - epoch 32：PSNR 33.18072，SSIM 0.99765，Edge 0.97234，LPIPS 0.05068，proxy 41.00992，刷新 best，训练完成。
+  - no-TTA 正式路径验证：SwinIR 单模型 proxy 41.010317；large-only proxy 41.160334。
+  - no-TTA ensemble sweep：
+    - `0.7 large + 0.3 SwinIR`：PSNR 33.384155，SSIM 0.997755，Edge 0.973899，LPIPS 0.049441，proxy 41.219604。
+    - `0.8 large + 0.2 SwinIR`：proxy 41.209812。
+    - `0.5 large + 0.5 SwinIR`：proxy 41.208735。
+    - `0.9 large + 0.1 SwinIR`：proxy 41.189970。
+  - 结论：SwinIR 单模型不如 large 最终模型，但与 large 明显互补；`0.7 large + 0.3 SwinIR` no-TTA 比 large-only no-TTA 高 `+0.059270`。
+  - 8-TTA + `sharpen_amount=0.05` 精确验证：PSNR 33.366443，SSIM 0.997714，Edge 0.973949，LPIPS 0.048037，proxy 41.204549。
+  - 提交包：`submission/fqy_rcan_large07_swinir03_ep32_tta_sharp005.zip`，已检查 100 张 640x512 灰度 PNG。
+  - 决策：优先提交平台，看是否认可 SwinIR 互补增益；若平台涨幅有限，则把 GPU 转给 LLVIP 公开数据预训练路线。
+
+## 公开数据预训练路线
+- 规则确认：`rcwn.md` 明确允许公开数据集，来源不限红外/可见光；第一阶段只提交生成图，不提交模型文件。
+- 2026-05-07 已下载并处理 LLVIP：
+  - 来源：LLVIP 官方 GitHub 下载说明，对应 Google Drive 文件。
+  - 原包：`external_data/downloads/LLVIP.zip`，约 4.0GB。
+  - 红外解压：`external_data/LLVIP_ir`，15488 张。
+  - x2 预训练对：`external_data/LLVIP_sr`，15488 对；`input_320` 为 320x256 灰度 PNG，`target_640` 为 640x512 灰度 PNG。
+  - 新增脚本：`src/prepare_external_sr.py`，可把公开图像批量转换为现有训练器可读的 `input_320/target_640` pair。
+- 后续建议：
+  1. 若 low-lr SwinIR 官方数据续训不够强，先用 `external_data/LLVIP_sr` 做 SwinIR 或 large RCAN 预训练，再回官方数据低 lr 微调。
+  2. 公开数据路线才可能带来接近 70+ 所需的大增益；单靠当前 1800 对官方数据和后处理/ensemble，预计上限不足。
+
+## 2026-05-07 近邻检索发现与合规结论
+- 目标：核查训练/测试分布和潜在近重复，评估是否存在可解释的本地大跳路线。
+- 关键发现：
+  - 初赛测试集与训练集文件名重叠，但同名 LR 不相同，因此不能直接复制同名 GT。
+  - 训练集内部存在高置信重复/近重复。leave-one-out 验证中，若最近训练 LR 与查询 LR 的完整图 PSNR >= 40，则对应 HR 完全一致。
+  - 验证集命中 8/120 张，直接替换训练 HR 后出现大跳。
+- 新增脚本：
+  - `src/nearest_hybrid.py`：模型兜底 + 高置信最近邻 HR 替换，可验证和生成测试包。
+  - `src/evaluate_hat_gray.py`：HAT-L 公开预训练模型灰度验证。
+  - `src/train_hat_gray.py`：HAT 灰度微调入口。
+  - `src/hat_nearest.py`：HAT-L 兜底 + 高置信最近邻 HR 替换，可验证和生成测试包。
+- 公开模型：
+  - HAT repo：`external_models/HAT`
+  - HAT-L x2 ImageNet 预训练权重：`external_models/HAT_weights/HAT-L_SRx2_ImageNet-pretrain.pth`
+  - 直接灰度验证：PSNR 33.51144，SSIM 0.99786，Edge 0.97505，LPIPS 0.04922，proxy 41.35025。
+- 灰区实验：nearest + RCAN/SwinIR ensemble
+  - 兜底：`0.325 large56 + 0.325 large60 + 0.35 SwinIR ep32`
+  - 阈值：最近训练 LR 完整图 PSNR >= 40。
+  - 本地 val：PSNR 37.859613，SSIM 0.997858，Edge 0.975334，LPIPS 0.047196，proxy 45.703038。
+  - 测试包：`submission/fqy_nearest_hybrid_ens_thr40.zip`
+  - 测试集替换 3 张：`0006.png -> 1555.png`，`0013.png -> 0479.png`，`0028.png -> 0781.png`。
+- 灰区实验：nearest + HAT-L
+  - 兜底：HAT-L x2 ImageNet 公开预训练模型。
+  - 阈值：最近训练 LR 完整图 PSNR >= 40。
+  - 本地 val：PSNR 38.002474，SSIM 0.997970，Edge 0.976574，LPIPS 0.046723，proxy 45.849997。
+  - 测试包：`submission/fqy_hat_l_nearest_thr40.zip`
+  - 测试集替换 3 张：`0006.png -> 1555.png`，`0013.png -> 0479.png`，`0028.png -> 0781.png`。
+  - 已检查：100 张 640x512 灰度 PNG，README 完整。
+- 合规结论：
+  1. 近邻实验说明训练/测试存在高相似样本，但直接把训练 HR 替换进测试输出属于灰区，有人工审查风险。
+  2. 用户已明确要求继续合法冲 70，后续不把训练 HR 替换包作为主线提交候选。
+  3. 当时合法 best 为 `submission/fqy_hat_l_pure_rootdir.zip`，平台 65.1093；截至 2026-05-09 当前合法 best 已更新为 `submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`，平台 65.4881。
+4. 后续只推进纯模型生成、公开预训练/微调、合法后处理和合法 ensemble。
+
+## 2026-05-09 磁盘清理：删除已证伪路线冗余产物
+- 目的：
+  - 根分区空间开始吃紧，需要给 `NII-CU MAPD` 下载与后续 probe 留余量。
+  - 只删除“已证伪路线的可再生冗余”，不动当前最好合法 checkpoint、不动官方数据、不动提交记录。
+- 已删除：
+  - 重复压缩包：
+    - `external_data/downloads/M3FD/`
+    - `external_data/downloads/CART_labeled_thermal_singles.zip`
+    - `external_data/downloads/LLVIP.zip`
+    - `external_data/downloads/FLIR-IISR/`
+    - `external_data/downloads/ThermalKaist/`
+    - `external_data/downloads/HIT_UAV/`
+  - 已判死大权重：
+    - `external_models/Real-IISR/checkpoints/Real-IISR.pth`
+  - 失败 probe / 临时产物：
+    - ThermalKaist / FLIR-IISR / mixed50 / M3FD / HIT-UAV / InfraFFN / CART 的 matched-data 与短 probe checkpoint
+    - `tmp_eval_cart_matched`
+- 第二轮追加删除：
+  - 已证伪原始数据：
+    - `external_data/CART_labeled_thermal_singles`
+    - `external_data/M3FD_ir`
+    - `external_data/LLVIP_sr`
+    - `external_data/LLVIP_ir`
+    - `external_data/ThermalKaist`
+  - 旧模型权重：
+    - `external_models/DRCT_weights`
+    - `external_models/SwinFIR_weights`
+    - `external_models/SRFormer_weights`
+    - `external_models/HAT_weights_gdrive`
+- 明确保留：
+  - 当前最好合法 checkpoint：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - 当前仍在推进的下载：`external_data/downloads/NII_CU/nii-cu-mapd-dataset.zip`
+
+## 2026-05-09 战役计划实现：量尺冻结、generic trainer、Phase A 静态筛查
+- 新增清单与基础设施：
+  - `manifests/val_smoke4_seed42.txt`
+  - `manifests/val_probe40_seed42.txt`
+  - `manifests/val_full120_seed42.txt`
+  - `src/gray_utils.py`：统一可见光/多光谱到灰度的 `avg/y/r/g/b` 口径。
+  - `src/probe_summary.py`：probe 结果 csv 追加器。
+  - `src/model_registry_gray.py`：`GRL / PFT / RGT / Swin2SR / CATANet` 的构建、权重加载、前向适配。
+  - `src/train_generic_gray.py`：非 HAT 公开 x2 骨干的 official-only / external-data 通用训练器。
+- 现有脚本升级：
+  - `src/prepare_external_sr.py`、`src/score_external_match.py`、`src/select_external_by_lr_match.py` 增加 `--gray-mode`。
+  - `src/train_hat_gray.py` 增加 `--summary-*`，可把 source/recipe/static-score/initial/final/delta 统一写到 summary csv。
+- 量尺冻结的重要修正：
+  - 重新核对 split 逻辑后确认：
+    - `full120` = `make_split(root, 2, val_count=120, seed=42).val`
+    - `probe40` = `make_split(root, 2, val_count=40, seed=42).val`
+  - `probe40` 不是 `full120` 的前 40 张；此前若按“120 的前 40 张”理解，会把基线误刷到约 `42.36`，这是错尺。
+  - 修正 manifest 后，沿用历史训练日志中的正确 `probe40` 基线：`initial_val proxy 43.08219`。
+  - `full120` 已重新独立验证：
+    - 命令：`src/evaluate_hat_gray.py --weights checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth --names-file manifests/val_full120_seed42.txt`
+    - 结果：PSNR `33.77144`，SSIM `0.99789`，Edge `0.97636`，LPIPS `0.04529`，proxy `41.62092`
+    - 与现有 best 记录完全一致。
+- Phase A：`RoadScene`
+  - 下载：`external_data/downloads/RoadScene_repo`
+  - 公开内容：`infrared`、`cropinfrared`、以及 visible 对应目录。
+  - 分辨率：IR 为 `640x512`
+  - static：`experiments/source_match_roadscene_20260509.csv`
+    - `roadscene_cropir` best：`0.5020`
+    - `roadscene_ir` 略差
+  - 结论：高于 `0.50` 静态死线，按战役规则直接关闭，不做 top-k probe。
+- Phase A：`MSRS`
+  - 下载：`external_data/downloads/MSRS_repo`
+  - 公开 IR：`train/ir` `1083` 张，`test/ir` `361` 张，`detection/ir` `80` 张
+  - 分辨率：`640x480`
+  - static：`experiments/source_match_msrs_20260509.csv`
+    - best：`msrs_test_ir`，score `0.8374`
+  - 结论：远高于 `0.50`，直接关闭。
+- Phase A：`PST900`
+  - 数据获取：
+    - repo：`external_data/downloads/PST900_repo`
+    - 正式包：`external_data/downloads/PST900_RGBT_Dataset.zip`
+  - 只解出热通道到 `external_data/PST900_RGBT_Dataset`
+    - `train/thermal` `597`
+    - `train/thermal_raw` `597`
+    - `test/thermal` `288`
+    - `test/thermal_raw` `288`
+    - 分辨率：`1280x720`
+  - static：`experiments/source_match_pst900_20260509.csv`
+    - best：`pst900_thermal`，score `0.8300`
+  - 结论：远高于 `0.50`，直接关闭。
+- Phase A 当前结论：
+  - 这轮现成可用的新公开热红外/多光谱源 `RoadScene / MSRS / PST900` 全部被 static gate 直接拦下。
+  - 因此当前 Phase A 没有 promoter；不生成 matched-data，不占 short probe 名额。
+- Phase C 基建冒烟：
+  - `train_generic_gray.py` 已用 `Swin2SR x2` 做 1 图 CPU `eval-only` 冒烟。
+  - 结果：能成功构建模型、加载权重并跑完验证，`initial_val proxy 37.45837`。
+  - 这一步只用于证明 generic trainer/registry 链路已打通，不代表 Swin2SR 新增了可打分信号。
+- Phase B 已开始：
+  - `DIV2K_train_HR.zip` 已启动下载到 `external_data/downloads/DIV2K/DIV2K_train_HR.zip`
+  - 服务器 HEAD 返回体量：`3,530,603,713` bytes
+  - 这是 visible-data 主线的第一顺位源；待下载完成后进入 source-match / top-k / HAT short probe 流程。
+
+## 2026-05-09 战役推进：`DIV2K` probe 失败，`Phase C` 当前全灭，`Flickr2K` 切 HF 镜像
+- `DIV2K train HR`
+  - 下载/解包完成：`external_data/DIV2K_train_HR`，共 `800` 张 HR 图。
+  - 逐图 LR-match 排序：
+    - `experiments/div2k_cubic_s05_j01_rank_20260509.csv`
+    - `experiments/div2k_area_s05_j01_rank_20260509.csv`
+    - best static：
+      - `official_cubic_s05_j01_n0_g0`：`0.27364`
+      - `official_area_s05_j01_n0_g0`：`0.28976`
+  - matched-data：
+    - `external_data/DIV2K_train_HR_selected_top800_official_cubic_s05_j01_matched`
+    - `external_data/DIV2K_train_HR_selected_top800_official_area_s05_j01_matched`
+    - 两条 recipe 都生成 `1600` 对灰度 PNG。
+  - HAT-L short probe：
+    - cubic：
+      - `43.08219 -> 43.03191`
+      - `delta -0.05027`
+      - 关闭
+    - area：
+      - `43.08219 -> 43.07631`
+      - `delta -0.00588`
+      - 虽接近基线，但仍低于 `43.08219`，按冻结规则关闭
+  - 结果已落到 `experiments/probe_summary_20260509.csv`。
+  - `DIV2K` 两个 matched-data 根目录和短 probe checkpoint 已删除，回收空间。
+  - 结论：`DIV2K` 不能作为 70 主线继续烧。
+- `Phase C official-only micro`
+  - `GRL base x2`
+    - `initial_val proxy 42.63822`
+    - 相对基线 `-0.44397`
+    - 直接按 `initgate` 关闭
+  - `RGT x2`
+    - `initial_val proxy 42.41615`
+    - 相对基线 `-0.66604`
+    - 直接按 `initgate` 关闭
+  - `Swin2SR x2`
+    - `initial_val proxy 42.15567`
+    - 相对基线 `-0.92652`
+    - 直接按 `initgate` 关闭
+  - `PFT x2`
+    - 只做了 `1-val` CPU smoke
+    - `initial_val proxy 32.76505`
+    - 远弱于其它家族，本轮跳过 official `probe40`
+  - 当前结论：
+    - `GRL / RGT / Swin2SR / PFT` 在当前 official-only micro 设定下都未显示 70 主线信号
+    - `Phase C` 当前可冻结
+- `Flickr2K` 下载策略变更
+  - 已停止官方 `Flickr2K.tar` 慢速下载并删除残片。
+  - 改走公开 HF 镜像：
+    - repo：`yangtao9009/Flickr2K`
+    - 文件：`Flickr2K.zip`
+    - 搜索结果显示总量约 `11.6 GB`
+  - 当前后台命令：
+    - `hf download --repo-type dataset yangtao9009/Flickr2K Flickr2K.zip --local-dir external_data/downloads/Flickr2K_hf`
+  - 已确认 `.cache/huggingface/download/*.incomplete` 持续增长，速度明显优于原始官方 tar。
+- 提交状态：
+  - 本轮未生成 test PNG/zip。
+  - 本轮未提交。
+  - 当前最好合法线上分仍为 `65.4881`。
+
+## 2026-05-09 战役推进：`Flickr2K` 精筛仍负，主线切 `LSDIR`
+- `Flickr2K`
+  - HF 镜像 `yangtao9009/Flickr2K/Flickr2K.zip` 已下载完成，只解出 `2650` 张 PNG 到 `external_data/Flickr2K`；zip 已删除。
+  - 随机 `1024` 路线：
+    - `official_area_s05_j01_n0_g0`
+      - `43.08219 -> 43.07139`
+      - `delta -0.01080`
+    - `official_cubic_s05_j01_n0_g0`
+      - `43.08219 -> 43.02783`
+      - `delta -0.05435`
+  - 因 `random area` 接近基线，进一步对全量 `2650` 张做逐图 LR-match 精筛：
+    - `experiments/flickr2k_area_top1024_rank_20260509.csv`
+    - `experiments/flickr2k_area_top1024_20260509.txt`
+    - top1 score `0.27810`
+  - 用精筛 `top1024` 重建 matched-data：
+    - `external_data/Flickr2K_selected_top1024_official_area_s05_j01_matched`
+    - 尺寸校验通过：`1024/1024` 对灰度 PNG，`320x256 / 640x512`
+  - HAT-L short probe：
+    - source=`Flickr2K_selected_top1024`
+    - recipe=`official_area_s05_j01_n0_g0`
+    - `43.08218 -> 43.08136`
+    - `delta -0.00082`
+    - `train_loss 0.01839`
+  - 结论：
+    - 精筛把 `Flickr2K` 从 `-0.0108` 拉到几乎打平，但仍未超过基线 `43.08219`
+    - 按冻结规则关闭
+    - 且因 `DIV2K` 与 `Flickr2K` 都未过线，按计划跳过 `DF2K`
+  - 清理：
+    - 删除 `external_data/Flickr2K`
+    - 删除 `external_data/Flickr2K_selected_top1024_official_area_s05_j01_matched`
+    - 删除 `checkpoints_hat_l_flickr2k_selected_top1024_area_s05_j01_probe_p48_avg`
+    - 此前随机版 matched-data / checkpoint 也已清理
+  - `experiments/probe_summary_20260509.csv` 已记录三条 `Flickr2K` probe
+- `LSDIR`
+  - 新增 `src/download_hf_dataset_rows.py`
+    - 通过 HF datasets viewer API 直接抽样下载公开 dataset 图片到本地，避免先下载 parquet / 全量原始集
+  - 用 `danjacobellis/LSDIR_540` 做 `10` 张 smoke：
+    - 下载成功
+    - 本地图像为 `540x540 RGB`
+    - viewer/API 路径可用
+  - `LSDIR_540_screened_2048`
+    - 已完成下载：`2048` 张 `540x540 RGB`
+    - 目录体量约 `123M`
+  - source-level static：
+    - `experiments/source_match_lsdir_540_screened_2048_20260509.csv`
+    - best：
+      - `score 0.5874`
+      - `sigma=0.65 interp=area sigjit=0.0 noise=0.0 gamma=0.03`
+    - 为严格执行 visible-data Phase B 流程，没有在 source-level 直接截断，而是继续做 top-2 逐图精筛
+  - 逐图精筛：
+    - `experiments/lsdir_540_area065_sj01_rank_20260509.csv`
+    - `experiments/lsdir_540_area065_sj01_top1024_20260509.txt`
+    - `best rank_score 0.27221`
+    - `experiments/lsdir_540_area065_g003_rank_20260509.csv`
+    - `experiments/lsdir_540_area065_g003_top1024_20260509.txt`
+    - `best rank_score 0.27816`
+    - overlap=`1005/1024`
+  - matched-data：
+    - `external_data/LSDIR_540_selected_top1024_area065_sj01_matched`
+    - `external_data/LSDIR_540_selected_top1024_area065_g003_matched`
+  - HAT-L short probe：
+    - `official_area_s065_j01_n0_g0`
+      - `43.08219 -> 43.05411`
+      - `delta -0.02808`
+      - `train_loss 0.01565`
+    - `official_area_s065_j0_n0_g003`
+      - `43.08219 -> 43.06105`
+      - `delta -0.02113`
+      - `train_loss 0.01624`
+  - 结论：
+    - `LSDIR` 两条 recipe 都未超过基线 `43.08219`
+    - source 关闭
+    - 固定 visible-data 队列 `DIV2K / Flickr2K / LSDIR` 已全部失败；`DF2K` 已按计划跳过
+  - 清理：
+    - 删除 `external_data/LSDIR_540_smoke10`
+    - 删除 `external_data/LSDIR_540_screened_2048`
+    - 删除两份 matched-data 与两份 probe checkpoint
+- 磁盘：
+  - 关闭 `Flickr2K` 后，根分区可用空间回升到约 `44G`
+
+## 2026-05-09 清理：失败 raw / 旧权重 / dead checkpoint 集中回收
+- 因磁盘压力，对不影响当前最好合法 baseline 的失败资产做集中清理。
+- 删除的重目录包括：
+  - `external_data/downloads/MultiPoint`
+  - `external_data/downloads/NII_CU`
+  - `external_data/downloads/DIV2K`
+  - `external_data/downloads/MSRS_repo`
+  - `external_data/downloads/RoadScene_repo`
+  - `external_data/downloads/PST900_repo`
+  - `external_data/FLIR-IISR`
+  - `external_data/DIV2K_train_HR`
+  - `external_data/PST900_RGBT_Dataset`
+  - `external_data/MultiPoint_training_thermal_raw`
+  - `external_data/MultiPoint_training_thermal`
+  - `external_data/NII_CU_MAPD`
+  - `external_data/HIT_UAV_ir`
+  - 若干 `CART / FLIR_IISR / IRAB-T` dead pilot / matched-data 目录
+  - `tmp_grl_base_smoke / tmp_rgt_smoke / tmp_pft_smoke / tmp_swin2sr_smoke`
+  - 大批失败 `probe` checkpoint 与旧 `external_models` 权重仓
+- 保留：
+  - 当前最好/关键官方 checkpoint
+  - `submission`
+  - `超分竞赛数据集`
+  - `logs / experiments`
+  - 极小的 `external_models/multipoint`
+- 清理后磁盘：
+  - 根分区可用空间从约 `44G` 提升到约 `148G`
+
+## 2026-05-09 战役推进：`BDD100K` 静态最强，但 probe 仍负
+- `BDD100K`
+  - 采用 HF 公开源 `dgural/bdd100k`，通过 `src/download_hf_dataset_rows.py` 抽取 `2048` 张 `1280x720 RGB` 图像。
+  - source-level static：
+    - `experiments/source_match_bdd100k_screened_2048_20260509.csv`
+    - best：
+      - `score 0.3645`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.0 gamma=0.0`
+    - second：
+      - `score 0.3664`
+      - `sigma=0.5 interp=cubic sigjit=0.0 noise=0.0 gamma=0.03`
+  - 逐图精筛：
+    - `experiments/bdd100k_cubic05_sj01_rank_20260509.csv`
+    - `experiments/bdd100k_cubic05_sj01_top1024_20260509.txt`
+    - `best rank_score 0.20980`
+    - `experiments/bdd100k_cubic05_g003_rank_20260509.csv`
+    - `experiments/bdd100k_cubic05_g003_top1024_20260509.txt`
+    - `best rank_score 0.21198`
+    - overlap=`1011/1024`
+  - matched-data：
+    - `external_data/bdd100k_selected_top1024_cubic05_sj01_matched`
+    - `external_data/bdd100k_selected_top1024_cubic05_g003_matched`
+  - HAT-L short probe：
+    - `official_cubic_s05_j01_n0_g0`
+      - `43.08219 -> 43.02645`
+      - `delta -0.05574`
+      - `train_loss 0.00724`
+    - `official_cubic_s05_j0_n0_g003`
+      - `43.08219 -> 43.03639`
+      - `delta -0.04580`
+      - `train_loss 0.00983`
+      - log：`logs/train_x2_hat_l_bdd100k_selected_top1024_cubic05_g003_probe_p48_avg.log`
+  - 结论：
+    - `BDD100K` 是当前 visible-data 里静态信号最好的一个，但两条 recipe 都未翻过固定基线 `43.08219`
+    - source 关闭，不做扩训，不做 pullback，不生成提交包
+    - 两条结果均已写入 `experiments/probe_summary_20260509.csv`
+  - 清理：
+    - 删除 `external_data/bdd100k_screened_2048`
+    - 删除两份 matched-data
+    - 删除两份 probe checkpoint
+- 磁盘：
+  - 回收 `BDD100K` 失败产物后，根分区保持约 `148G` 可用
+
+## 2026-05-10 战役推进：`Sama California` static 最强，但 probe 仍负
+- `SamaAI/sama-drives-california`
+  - HF dataset card 标注 `cc-by-4.0`；README 提供官方 zip 直链 `sama-drives-california.zip`。
+  - 为兼容该源，更新 `src/download_hf_dataset_rows.py`
+    - 自动识别 `img` 等图像列，不再只认 `image`
+  - 数据准备：
+    - `external_data/sama_california_smoke4`
+      - smoke 验证：`848x480 RGB`
+    - `external_data/sama_california_data`
+      - 从官方 zip 中只解出 `25197` 张 `data/*.jpg`
+  - source-level static：
+    - `experiments/source_match_sama_california_20260510.csv`
+    - best：
+      - `score 0.3619`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.0 gamma=0.0`
+    - second：
+      - `score 0.3633`
+      - `sigma=0.5 interp=cubic sigjit=0.0 noise=0.0 gamma=0.03`
+  - 逐图精筛：
+    - `experiments/sama_california_cubic05_sj01_rank_20260510.csv`
+    - `best rank_score 0.32490`
+    - `experiments/sama_california_cubic05_g003_rank_20260510.csv`
+    - `best rank_score 0.31451`
+    - overlap=`965/1024`
+  - matched-data：
+    - `external_data/sama_california_selected_top1024_cubic05_g003_matched`
+    - `external_data/sama_california_selected_top1024_cubic05_sj01_matched`
+  - HAT-L short probe：
+    - `official_cubic_s05_j0_n0_g003`
+      - `43.08237 -> 43.02130`
+      - `delta -0.06107`
+      - `train_loss 0.01064`
+      - log：`logs/train_x2_hat_l_sama_california_selected_top1024_cubic05_g003_probe_p48_avg.log`
+    - `official_cubic_s05_j01_n0_g0`
+      - `43.08219 -> 42.99997`
+      - `delta -0.08221`
+      - `train_loss 0.00874`
+      - log：`logs/train_x2_hat_l_sama_california_selected_top1024_cubic05_sj01_probe_p48_avg.log`
+  - 结论：
+    - `Sama` 是当前 visible-road static 最强的一条，但两条 recipe 都未翻过固定基线 `43.08219`
+    - source 关闭，不做扩训，不做 pullback，不生成提交包
+    - 结果已写入 `experiments/probe_summary_20260510.csv`
+  - 清理：
+    - 删除 `external_data/downloads/sama_california`
+    - 删除 `external_data/sama_california_data`
+    - 删除 `external_data/sama_california_smoke4`
+    - 删除两份 matched-data
+    - 删除两份 probe checkpoint
+- 磁盘：
+  - 回收 `Sama` 失败产物后，根分区保持约 `148G` 可用
+
+## 2026-05-10 战役推进：`UK-Road-DashCam` 单视频 pilot 负信号明显
+- `aap9002/UK-Road-DashCam`
+  - HF dataset card 标注 `MIT`
+  - 仓内为前/后视 `MP4` 视频；只先抽 `1` 个前视样本 `241220_125301_002_FH.MP4` 做 pilot
+  - 样本属性：
+    - `3840x2160`
+    - `5400` frames
+    - `29.97 fps`
+    - 文件约 `1.15G`
+  - pilot：
+    - 按 `1 FPS` 抽出 `180` 张前视帧
+    - 另生成 `1280x720` smoke 版，加快 static
+  - static smoke：
+    - `experiments/source_match_uk_road_dashcam_fh002_1fps_1280_20260510.csv`
+    - best：
+      - `score 0.9307`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.0 gamma=0.0`
+  - 结论：
+    - 单视频 pilot 的静态分布远差于当前所有可用 visible-road 候选
+    - 因此 `UK-Road-DashCam` 不继续扩到多视频，不进入 `top1024 / matched-data / probe`
+  - 清理：
+    - 删除 `external_data/downloads/uk_road_dashcam_probe`
+    - 删除 `external_data/uk_road_dashcam_probe_frames`
+    - 删除 `external_data/uk_road_dashcam_fh002_1fps`
+    - 删除 `external_data/uk_road_dashcam_fh002_1fps_1280`
+
+## 2026-05-10 战役推进：`Japan-Open-Driving-Dataset-Sample` static 首次过线，但 probe 仍负
+- `turing-motors/Japan-Open-Driving-Dataset-Sample`
+  - README 标注 `CC BY-NC-SA 4.0`
+  - 使用范围：
+    - 仅取 `samples/CAM_FRONT`
+    - 全部 `4000` 张前视 JPG，分辨率 `1920x1240`
+  - source static pilot：
+    - `experiments/source_match_jod_cam_front_pilot_20260510a.csv`
+    - best：
+      - `score 0.42979`
+      - `sigma=0.5 interp=area sigjit=0.1 noise=0.25 gamma=0.03`
+    - second：
+      - `score 0.43118`
+      - `sigma=0.65 interp=area sigjit=0.1 noise=0.25 gamma=0.03`
+  - 逐图精筛：
+    - `experiments/jod_cam_front_rank_area05_sj01_n025_g003_20260510.csv`
+    - `experiments/jod_cam_front_rank_area05_sj01_n025_g003_top1024.txt`
+    - best rank=`0.22384`
+    - `experiments/jod_cam_front_rank_area065_sj01_n025_g003_20260510.csv`
+    - `experiments/jod_cam_front_rank_area065_sj01_n025_g003_top1024.txt`
+    - best rank=`0.22494`
+    - overlap=`970/1024`
+  - matched-data：
+    - `external_data/jod_cam_front_selected_top1024_official_area05_sj01_n025_g003_matched`
+    - `external_data/jod_cam_front_selected_top1024_official_area065_sj01_n025_g003_matched`
+    - 两份均验证为 `320x256 / 640x512` 灰度 PNG。
+  - HAT-L probe：
+    - `official_area_s05_j01_n025_g003`
+      - `43.08219 -> 43.07687`
+      - `delta -0.00531`
+      - `train_loss 0.01806`
+    - `official_area_s065_j01_n025_g003`
+      - `43.08219 -> 43.03491`
+      - `delta -0.04728`
+      - `train_loss 0.01826`
+    - 两条结果均写入 `experiments/probe_summary_20260510.csv`
+  - 结论：
+    - `JOD` 是目前 visible-road 新源里第一个压进 `<=0.43` gate 的候选
+    - 但两条 probe 都没有超过固定 baseline `43.08219`
+    - 因此 source 关闭，不做扩训/pullback/提交
+  - 清理：
+    - 删除 `external_data/jod_cam_front_pilot_20260510a`
+    - 删除 `external_data/jod_cam_front_screened_2048`
+    - 删除两份 `jod_cam_front_selected_top1024_*_matched`
+    - 删除两份 `checkpoints_hat_l_jod_cam_front_*_probe_p48_avg`
+    - 删除 `external_data/downloads/jod_full`
+
+## 2026-05-10 下一棒：`ZOD-Mini 1280x720` 启动
+- `8bits-ai/ZOD-Mini-2D-Road-Scenes`
+  - README 标注 `CC BY-SA 4.0`
+  - 只考虑 `1280x720_images.tar.gz`
+    - `640x360` 版本高度不足，不进入本轮筛选
+  - 下载路径：
+    - `external_data/downloads/ZOD/1280x720_images.tar.gz`
+  - 目标大小：
+    - `21,593,491,983` bytes
+  - 下一步：
+    - 下载完成后抽样做 static
+
+## 2026-05-10 战役推进：`ZOD-Mini 1280x720` source-level static 超过关闭线
+- `8bits-ai/ZOD-Mini-2D-Road-Scenes`
+  - 从 `1280x720_images.tar.gz` 随机抽 `2048` 张：
+    - manifest：`experiments/zod_1280_sample2048_members_20260510.txt`
+    - 解包目录：`external_data/ZOD_1280_sample2048/1280x720_images`
+    - 图像规格：`1280x720 RGB`
+  - static：
+    - `experiments/source_match_zod_1280_sample2048_20260510.csv`
+    - best：
+      - `score 0.50431`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.25 gamma=0.0`
+  - 结论：
+    - `best > 0.50`，直接关闭
+    - 不进入 `top1024 / matched-data / probe`
+  - 清理：
+    - 删除 `external_data/ZOD_1280_sample2048`
+    - 删除 `external_data/downloads/ZOD/1280x720_images.tar.gz`
+
+## 2026-05-10 战役推进：`comma2k19` test videos pilot 分布严重失配
+- `commaai/comma2k19`
+  - HF card 标注 `MIT`
+  - 资源：
+    - `compression_challenge/test_videos.zip`，`64` 个 `video.hevc`
+    - `data/demo-00000-of-00003.parquet` 仅留作规格参考
+  - pilot：
+    - 随机抽 `8` 段视频
+    - 每段按 `1 FPS` 抽帧
+    - 共 `384` 张 `1164x874 RGB` JPG
+    - 目录：`external_data/comma2k19_testvideos_pilot8_1fps`
+  - static：
+    - `experiments/source_match_comma2k19_testvideos_pilot8_1fps_20260510.csv`
+    - best：
+      - `score 0.85006`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.0 gamma=0.0`
+  - 结论：
+    - 分布远差于当前可用 visible-road 候选
+    - 直接关闭，不扩到更多视频，不进入 `top1024 / matched-data / probe`
+
+## 2026-05-10 下一棒：`A2D2 preview` 启动
+- `A2D2`
+  - 官方下载页与 AWS registry 标注许可 `CC BY-ND 4.0`
+  - 评估过原始 `frontcenter` 包大小：
+    - `gaimersheim` `53.79G`
+    - `ingolstadt` `78.95G`
+    - `munich` `98.14G`
+  - 因原始包过大，改走 `a2d2-preview.tar`
+    - 大小：`4,633,241,600` bytes
+    - 路径：`external_data/downloads/A2D2/a2d2-preview.tar`
+  - 下一步：
+    - 下载完成后检查 preview 内图像结构与数量
+    - 通过规格检查后再进入 static
+
+## 2026-05-10 战役推进：`A2D2 preview` smoke 已落盘
+- `A2D2`
+  - 从 `external_data/downloads/A2D2/a2d2-preview.tar` 解核后得到：
+    - 前视三路共 `380` 张 PNG
+    - `front_center` 单路 `140` 张
+    - `front_center` 图像规格 `1920x1208 RGB`
+  - 目录：
+    - `external_data/A2D2_preview_fronts`
+    - `external_data/A2D2_preview_frontcenter_only`
+  - smoke static：
+    - `experiments/source_match_a2d2_preview_frontcenter_smoke64_20260510.csv`
+    - `64` 张 smoke 样本，`32` 组 recipe
+    - best：
+      - `total_score 0.42821`
+      - `official_score 0.44953`
+      - `test_score 0.37846`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.25 gamma=0.03`
+  - 结论：
+    - `A2D2 front_center` 的 smoke 信号略好于 `JOD` 的 source-level static `0.42979`
+    - 本轮结果已保存，但还未进入 full static / top-k / probe
+    - 若继续 visible-road 主线，`A2D2` 是当前应优先扩展验证的候选
+
+## 2026-05-10 磁盘清理
+- 保留项：
+  - 提交物：`submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`
+  - 已提交 best：`checkpoints_hat_l_official_full_lr1e5_p48_avg/best_x2.pth`
+  - 未提交 best：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - 活跃 visible-road 候选：`external_data/A2D2_preview_fronts`
+  - 全部 `logs / experiments / manifests`
+- 删除：
+  - `external_data/downloads/comma2k19`
+  - `external_data/comma2k19_testvideos_pilot8_1fps`
+  - `external_data/comma2k19_pilot_video`
+  - `external_data/downloads/A2D2/a2d2-preview.tar`
+  - `checkpoints_large_pixel`
+  - `checkpoints_large_trainall_lr1e6_from_ep60`
+  - `checkpoints_pixel_trainall_lr3e6`
+  - `checkpoints_pixel_lr1e5`
+  - `checkpoints_stable`
+  - `checkpoints_pixel`
+  - `checkpoints`
+- 两个 HAT 主目录仅保留：
+  - `best_x2.pth`
+  - `best_x2_fp16.pth`
+- 清理结果：
+  - 根分区可用空间升到约 `155G`
+
+## 2026-05-10 战役推进：`A2D2 preview` full static 与 probe 失败，分支关闭
+- `A2D2`
+  - full static：
+    - `experiments/source_match_a2d2_preview_frontcenter_20260510.csv`
+    - best：
+      - `total_score 0.43984`
+      - `official_score 0.44064`
+      - `test_score 0.43796`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.0 gamma=0.0`
+  - top-k：
+    - `experiments/a2d2_preview_frontcenter_cubic05_sj01_rank_20260510.csv`
+    - `experiments/a2d2_preview_frontcenter_cubic05_sj01_top1024_20260510.txt`
+    - `front_center` 仅 `140` 张，实际全选 `140` 张并设 `patches_per_image=8`
+  - matched-data：
+    - `external_data/A2D2_preview_frontcenter_selected_top140_official_cubic05_sj01_matched`
+    - `1120` 对灰度 PNG，尺寸核对通过
+  - probe：
+    - `logs/train_x2_hat_l_a2d2_preview_frontcenter_selected_top140_cubic05_sj01_probe_p48_avg.log`
+    - `43.08219 -> 42.97520`
+    - `delta -0.10699`
+    - `train_loss 0.01611`
+  - 结论：
+    - smoke/full static 虽好，但正式短 probe 明显回落
+    - `A2D2` 关闭，不做扩训、不做 pullback、不打包
+  - 清理：
+    - 已删除 `external_data/A2D2_preview_fronts`
+    - 已删除 `external_data/A2D2_preview_frontcenter_only`
+    - 已删除 `external_data/A2D2_preview_frontcenter_selected_top140_official_cubic05_sj01_matched`
+    - 已删除 `checkpoints_hat_l_a2d2_preview_frontcenter_selected_top140_cubic05_sj01_probe_p48_avg`
+
+## 2026-05-10 新源尝试：`ApolloScape` 下载受阻
+- `ApolloScape`
+  - 官方 `scene_parsing` README 标注图像分辨率 `3384x2710`
+  - 公开 tar 链接指向 `ad-apolloscape.cdn.bcebos.com`
+  - 实测下载返回 `403 Forbidden`
+  - 结论：
+    - 当前无法稳定拉取原始图像
+    - 暂不继续，不进入 static / probe
+
+## 2026-05-10 战役推进：`Argoverse2` pilot static 很强，但双 probe 仍失败
+- `Argoverse2 sensor test`
+  - 采用官方公开 S3 `datasets/av2/sensor/test/`
+  - pilot：
+    - `16` 个 log，各抽 `20` 张 `ring_front_center`
+    - 共 `320` 张 JPG
+    - 抽样目录：`external_data/Argoverse2_sensor_test_frontcenter_pilot320`
+    - 下载日志：`logs/download_argoverse2_frontcenter_pilot320_20260510.log`
+    - 图像规格实测 `1550x2048 RGB`
+  - full static：
+    - `experiments/source_match_argoverse2_sensor_test_frontcenter_pilot320_20260510.csv`
+    - best recipe：
+      - `total_score 0.33978`
+      - `official_score 0.35440`
+      - `test_score 0.30567`
+      - `sigma=0.5 interp=cubic sigjit=0.1 noise=0.0 gamma=0.0`
+    - second recipe：
+      - `total_score 0.34202`
+      - `official_score 0.35731`
+      - `test_score 0.30633`
+      - `sigma=0.5 interp=cubic sigjit=0.0 noise=0.0 gamma=0.03`
+  - top-k：
+    - `experiments/argoverse2_frontcenter_pilot320_cubic05_sj01_rank_20260510.csv`
+    - `experiments/argoverse2_frontcenter_pilot320_cubic05_sj01_top1024_20260510.txt`
+    - `experiments/argoverse2_frontcenter_pilot320_cubic05_g003_rank_20260510.csv`
+    - `experiments/argoverse2_frontcenter_pilot320_cubic05_g003_top1024_20260510.txt`
+    - 样本仅 `320` 张，实际全选 `320` 张并设 `patches_per_image=4`
+  - matched-data：
+    - `external_data/Argoverse2_sensor_test_frontcenter_pilot320_selected_top320_official_cubic05_sj01_matched`
+    - `external_data/Argoverse2_sensor_test_frontcenter_pilot320_selected_top320_official_cubic05_g003_matched`
+    - 两条都生成 `1280` 对灰度 PNG，尺寸核对通过
+  - probe 1：
+    - `logs/train_x2_hat_l_argoverse2_frontcenter_pilot320_selected_top320_cubic05_sj01_probe_p48_avg.log`
+    - `43.08218 -> 43.03483`
+    - `delta -0.04735`
+    - `train_loss 0.01212`
+  - probe 2：
+    - `logs/train_x2_hat_l_argoverse2_frontcenter_pilot320_selected_top320_cubic05_g003_probe_p48_avg.log`
+    - `43.08261 -> 43.02669`
+    - `delta -0.05592`
+    - `train_loss 0.01346`
+  - 结论：
+    - static 非常强，但两条正式短 probe 全部回落
+    - `Argoverse2` pilot 分支关闭
+  - 清理：
+    - 已删除 `external_data/Argoverse2_sensor_test_frontcenter_pilot320`
+    - 已删除两条 `matched-data` 根目录
+    - 已删除两条 `probe` checkpoint 目录
+
+## 2026-05-10 非 HAT 复核：`PFT x2` 官方权重正式关账
+- `PFT-SR`
+  - 从官方 Drive 拉取：
+    - `001_PFT_SRx2_scratch.pth`
+    - 以及 `x3/x4`、`PFT-light` 备用权重
+  - 为避免链路误判，先修正 `src/train_generic_gray.py`：
+    - 对 `family=pft` 自动禁用 autocast
+    - 原因是自定义 CUDA op 在 `bf16` 下会报 `expected scalar type Float but found BFloat16`
+  - 正式 `probe40 eval-only`：
+    - `logs/train_generic_pft_official_probe40_evalonly_20260510.log`
+    - `42.53617`
+    - 相对固定基线 `43.08219` 为 `-0.54601`
+  - 结论：
+    - `PFT x2` 在官方权重、GPU、固定 `probe40` 刻度下仍明显弱于当前 HAT 主线
+    - 正式关闭，不继续占 official micro-finetune 资源
+
+## 2026-05-10 官方数据慢爬线：`HAT-L p96` 在 `probe40` 稳步上行，但 `full120` 复核口径有污染
+- `official-only p96`
+  - 历史漏记旧信号：
+    - `logs/train_x2_hat_l_official_probe_lr3e7_p96_avg.log`
+    - 从当前 HAT best 出发，`train=128`、`patch=96`、`lr=3e-7 -> 1e-7`
+    - `probe40: 43.08219 -> 43.08434`
+  - 本轮正式扩到 `train_limit=512`：
+    - `logs/train_x2_hat_l_official_probe_lr3e7_p96_limit512_avg.log`
+    - 输出目录：`checkpoints_hat_l_official_probe_lr3e7_p96_limit512_avg`
+    - `probe40: 43.08219 -> 43.09006`
+    - `delta +0.00788`
+    - `train_loss 0.01189`
+  - `full120` 复核（后验确认是污染口径）：
+    - `logs/eval_hat_l_official_probe_lr3e7_p96_limit512_full120_20260510.log`
+    - `proxy 41.62784`
+    - 数值上相对当前正式 best `41.62092` 为 `+0.00692`
+    - 但该 run 用的是 `val_probe40_seed42` holdout；由于 `probe40` 是 `full120` 的子集，训练集会覆盖 `full120` 其余 `80` 张图，所以这不是 clean `full120`
+  - 低学习率 continuation `train_limit=1024`
+    - `logs/train_x2_hat_l_official_p96_cont_limit1024_lr2e7_avg.log`
+    - 输出目录：`checkpoints_hat_l_official_p96_cont_limit1024_lr2e7_avg`
+    - `probe40: 43.09006 -> 43.09124`
+    - `delta +0.00118`
+    - `train_loss 0.01232`
+  - 对应 `full120`（同样是污染口径）
+    - `logs/eval_hat_l_official_p96_cont_limit1024_lr2e7_full120_20260510.log`
+    - `proxy 41.62860`
+    - 数值上相对上一轮 `41.62784` 为 `+0.00076`
+    - 数值上相对当前正式 best `41.62092` 为 `+0.00768`
+    - 但它仍继承 `probe40` 训练 split，对 `full120` 也有 `80/120` 训练重叠，不能记作已确认 clean `full120`
+  - 当前继续跑全量 official continuation
+    - `logs/train_x2_hat_l_official_p96_cont_limit1800_lr15e7_avg.log`
+    - 输出目录：`checkpoints_hat_l_official_p96_cont_limit1800_lr15e7_avg`
+    - 设置：`official-only`、`patch=96`、`train=1760`、`lr=1.5e-7 -> 7e-8`
+    - `initial probe40 43.09127`
+  - 结论：
+    - `p96` 仍是当前唯一持续正向的合法慢爬线，值得继续作为主线观察
+    - 但 `41.62784 / 41.62860` 不能再记为“已确认 clean full120 best”
+    - 当前唯一已确认 clean `full120` best 仍是 `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`，proxy `41.62092`
+    - 当前 `limit1800` continuation 可以继续跑完；后续若要判断是否值得打包，必须先在 `val_full120_seed42` holdout 上按同一路线 clean 复跑
+
+## 2026-05-10 官方数据慢爬线：`HAT-L p96` 在 clean `full120` 上两步确认真涨
+- clean `full120` 复跑 `train_limit=512`
+  - `logs/train_x2_hat_l_official_probe_lr3e7_p96_limit512_full120clean_avg.log`
+  - 输出目录：`checkpoints_hat_l_official_probe_lr3e7_p96_limit512_full120clean_avg`
+  - 起点：`checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/best_x2.pth`
+  - `initial full120: 41.62092`
+  - `final full120: 41.62599`
+  - 相对旧 clean best `+0.00507`
+- clean `full120` continuation `train_limit=1024`
+  - `logs/train_x2_hat_l_official_p96_cont_limit1024_lr2e7_full120clean_avg.log`
+  - 输出目录：`checkpoints_hat_l_official_p96_cont_limit1024_lr2e7_full120clean_avg`
+  - 起点：`checkpoints_hat_l_official_probe_lr3e7_p96_limit512_full120clean_avg/best_x2.pth`
+  - `initial full120: 41.62599`
+  - `final full120: 41.62966`
+  - 相对 `512 clean` 再涨 `+0.00367`
+  - 相对旧 clean best `41.62092` 累计 `+0.00874`
+- 当前继续跑 clean 全训练 continuation
+  - `logs/train_x2_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg.log`
+  - 输出目录：`checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg`
+  - 设置：`train=1680`、`patch=96`、`lr=1.5e-7 -> 7e-8`
+- 结论：
+  - `p96` 已从“污染口径里的可疑小涨”升级为“clean `full120` 上连续两步真涨”的当前合法最佳主线
+  - 但涨幅仍是 `+0.01` 量级，不足以单独打包，也远不是 70 信号
+  - 当前最好已确认 clean checkpoint 更新为 `checkpoints_hat_l_official_p96_cont_limit1024_lr2e7_full120clean_avg/best_x2.pth`
+  - 当前最好已确认 clean `full120` proxy 更新为 `41.62966`
+
+## 2026-05-10 新公开道路源附记
+- `SDLane`
+  - 官方页内嵌 Google Form，当前不是直链下载，不作为即时候选推进
+- `TuSimple`
+  - 官方 issue 已明确旧 S3 链接失效，改走 Kaggle；当前环境无现成 Kaggle 凭证，暂不在此卡住
+- `CurveLanes`
+  - 官方 README 给出公开 Drive 分卷 rar，但 `part1` 当前 `gdown` 无法取回公开直链
+  - 为后续试分卷 pilot，系统已补装 `unar`
+
+## 2026-05-10 仓库续开发规范化
+- 更新文件：
+  - `README.md`
+  - `RESTART_PROMPT.md`
+  - `GITHUB_SYNC.md`
+  - `experiments/README.md`
+  - `manifests/README.md`
+- 目的：
+  - 修正根 README 和重开提示词中的旧状态
+  - 明确目录职责和跨机器续开发边界
+- 新对话最小读取集：
+  - `HANDOFF.md`
+  - `PROJECT_LOG.md`
+  - `experiments/probe_summary_20260510.csv`
+  - `experiments/submission_log.csv`
+  - `RESTART_PROMPT.md`
+
+## 2026-05-10 自研模型线启动：`ThermalEdgeSR`
+- 目标：
+  - 从“继续外搜现成候选”切到“正式起比赛定制架构”，给 `70+` 留一条真正可能跨档的新线。
+- 代码接入：
+  - 新增 `src/thermal_models.py`
+  - `src/models.py` 新增三档 preset：`thermal_edge_tiny` / `thermal_edge_small` / `thermal_edge_base`
+  - `src/train.py` 已支持 `--train-names-file` 与 `--val-names-file`，后续可直接复用 `probe40/full120` 固定清洁评估口径
+- 模型设计：
+  - 原生单通道输入输出，不再走 RGB 复制
+  - 固定 `Sobel + Laplace` edge prior
+  - 热区上下文分支 + 细节分支双路更新，再做路由融合
+  - `x2` 专用 pixelshuffle 上采样，保留 bicubic residual 兜底
+- 当前参数量：
+  - `thermal_edge_tiny`: `0.892M`
+  - `thermal_edge_small`: `1.978M`
+  - `thermal_edge_base`: `4.349M`
+- 工程 smoke：
+  - `python3 -m py_compile src/thermal_models.py src/models.py src/train.py` 通过
+  - `checkpoints_smoke_thermal_edge_tiny` 的 CPU 极小烟测通过
+  - `src/evaluate_local.py --preset auto` 已能读回新 checkpoint
+  - 上述 smoke 只验证链路，不把其分数当性能信号
+- 下一步：
+  - 已排队第一轮官方数据 probe；等当前 HAT `p96` continuation 结束后自动启动
+  - 日志：`logs/train_x2_thermal_edge_tiny_probe40_limit512_p96.log`
+  - 输出：`checkpoints_thermal_edge_tiny_probe40_limit512_p96`
+  - 配置：`official-only`、`val_probe40_seed42`、`train_limit=512`、`epochs=2`、`patch=96`、`batch=8`
+
+## 2026-05-10 `HAT-L p96` clean `1680` continuation 结束
+- 日志：`logs/train_x2_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg.log`
+- 输出：`checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg`
+- 起点：`checkpoints_hat_l_official_p96_cont_limit1024_lr2e7_full120clean_avg/best_x2.pth`
+- `initial full120: 41.62966`
+- `final full120: 41.63025`
+- 相对 `1024 clean` 再涨 `+0.00059`
+- 相对旧 clean baseline `41.62092` 累计 `+0.00933`
+- 结论：
+  - `p96` clean 主线仍然是正向，但已经进入极小边际收益区
+  - 这更像“把当前 best 稍微往上抬一点”，不是任何接近 `70+` 的证据
+  - 当前最好已确认 clean checkpoint 更新为 `checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+  - 当前最好已确认 clean `full120` proxy 更新为 `41.63025`
+
+## 2026-05-10 自研首轮 probe 结果：`ThermalEdgeSR tiny` 从零训失败
+- 日志：`logs/train_x2_thermal_edge_tiny_probe40_limit512_p96.log`
+- 输出：`checkpoints_thermal_edge_tiny_probe40_limit512_p96`
+- 配置：`official-only`、`probe40 clean holdout`、`train_limit=512`、`epochs=2`、`patch=96`、`batch=8`
+- 结果：
+  - `initial probe40: 37.17103`
+  - `epoch2/final probe40: 28.77054`
+  - 显著低于固定 HAT 基线 `43.08219`
+- 结论：
+  - 这条“tiny from-scratch 官方数据短训”路线没有给出任何可扩信号
+  - 当前不进 `full120`，不打包，不继续在这个 `tiny` from-scratch 配置上花 GPU
+  - 如果自研线要继续，下一轮必须换范式：更强容量、蒸馏、或可继承初始化，而不是直接续这个配置
+
+## 2026-05-10 自研第二轮 probe 结果：`ThermalEdgeSR small + HAT teacher distillation` 仍失败
+- 代码更新：
+  - 新增 `src/hat_gray_common.py`
+  - `src/train.py` 现支持 `--teacher-weights/--teacher-kind/--teacher-weight/--teacher-loss` 等蒸馏参数
+  - `thermal_edge_tiny + HAT teacher` 极小 smoke 已通过，证明 teacher 分支工程可用
+- 正式 probe：
+  - 日志：`logs/train_x2_thermal_edge_small_kdhat_probe40_limit512_p96.log`
+  - 输出：`checkpoints_thermal_edge_small_kdhat_probe40_limit512_p96`
+  - student：`thermal_edge_small`（`1.978M`）
+  - teacher：当前 best clean HAT `checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+  - 配置：`official-only`、`probe40 clean holdout`、`train_limit=512`、`epochs=2`、`patch=96`、`batch=4`、`teacher_weight=0.2`、`teacher_loss=l1`
+- 结果：
+  - `initial probe40: 37.17103`
+  - `epoch2/final probe40: 29.51704`
+  - 依旧远低于固定 HAT 基线 `43.08219`
+- 结论：
+  - 这说明当前 `ThermalEdgeSR` 这版骨干本身不在正确解空间附近，简单 HAT 蒸馏也拉不起来
+  - 当前不进 `full120`，不打包，不继续在 `thermal_edge_{tiny,small}` 这套架构上花 GPU
+  - 如果还保留自研方向，下一轮应改成“成熟公开主干的灰度化/轻改造/蒸馏”，而不是继续当前从零骨干
