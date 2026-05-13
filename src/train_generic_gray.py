@@ -305,7 +305,7 @@ def parse_args():
     parser.add_argument("--val-data")
     parser.add_argument("--scale", type=int, choices=[2], default=2)
     parser.add_argument("--weights", required=True)
-    parser.add_argument("--family", choices=["grl", "pft", "rgt", "swin2sr", "catanet"], required=True)
+    parser.add_argument("--family", choices=["grl", "pft", "rgt", "swin2sr", "catanet", "sst"], required=True)
     parser.add_argument("--variant", default="base")
     parser.add_argument("--param-key", default="")
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import os
 import sys
@@ -182,12 +183,29 @@ def forward_gray(model: torch.nn.Module, lr_gray: torch.Tensor, gray_mode: str) 
     return rgb_to_gray(out, gray_mode)
 
 
+def read_names(args) -> list[str]:
+    split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    else:
+        names = split.val
+    return names[: args.limit] if args.limit else names
+
+
+def write_metrics_csv(path: str, rows: list[dict[str, float | str]]) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["name", "psnr", "ssim", "edge", "lpips", "proxy"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 @torch.no_grad()
 def validate(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
-    split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    names = read_names(args)
     print(f"val={len(names)} scale=x{args.scale}")
 
     model = build_mambairv2(args.variant, args.scale, args.use_checkpoint).to(device).eval()
@@ -205,16 +223,26 @@ def validate(args) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    metric_rows: list[dict[str, float | str]] = []
     for name in tqdm(names, desc="val", leave=False):
         lr, hr = load_pair(args.data, name, args.scale, device)
         with autocast_context(device, args.amp):
             pred = forward_gray(model, lr, args.gray_mode)
         metrics = measure_batch(pred.float(), hr, edge_metric, lpips_fn)
+        one = dict(metrics)
+        one.setdefault("lpips", 0.0)
+        one["proxy"] = metric_proxy(one)
+        row: dict[str, float | str] = {"name": name}
+        row.update(one)
+        metric_rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
+    if args.metrics_csv:
+        write_metrics_csv(args.metrics_csv, metric_rows)
+        print(f"metrics_csv={args.metrics_csv}")
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out.items()))
 
 
@@ -228,6 +256,8 @@ def parse_args():
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file")
+    parser.add_argument("--metrics-csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")

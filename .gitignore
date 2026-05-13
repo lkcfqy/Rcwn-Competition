@@ -48,6 +48,7 @@ logs/
 submission/*.zip
 submission/*/
 !submission/README.md
+!submission/fqy_hat_hat_ssttta_275225500_raw.zip
 
 # Keep experiment tables and small text manifests tracked by default.
 !experiments/
@@ -56,7 +57,15 @@ submission/*/
 !experiments/README.md
 !*.md
 
-# Re-ignore rebuildable experiment caches and ranking dumps.
+# Re-ignore rebuildable experiment caches, per-image metric dumps, and image outputs.
+experiments/*/
+experiments/**/*.png
+experiments/**/*.jpg
+experiments/**/*.jpeg
+experiments/**/*.pt
+experiments/**/*.pth
+experiments/**/*.npy
+experiments/**/*.npz
 experiments/*_rank_*.csv
 experiments/*_top1024*.txt
 experiments/*_top140*.txt

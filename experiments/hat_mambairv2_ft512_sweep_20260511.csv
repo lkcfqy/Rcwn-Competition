@@ -1,0 +1,4 @@
+route,alpha_hat,interp,blend_interp,sharpen_amount,sharpen_radius,clip_mode,psnr,ssim,edge,lpips,proxy,metrics_csv
+a0p85_raw,0.85,,0.0,0.0,1.0,hard,33.878364382416365,0.9979559188087781,0.9768583416938782,0.046246939559932795,41.72732269953692,experiments/router_metrics_20260511/hat_nativeio_tta_mambairv2_large_ft512_notta_full120/a0p85_raw.csv
+a0p9_raw,0.9,,0.0,0.0,1.0,hard,33.877696212356824,0.9979531213641166,0.9768755699197451,0.04596777513458316,41.727230530111854,experiments/router_metrics_20260511/hat_nativeio_tta_mambairv2_large_ft512_notta_full120/a0p9_raw.csv
+a0p95_raw,0.95,,0.0,0.0,1.0,hard,33.87384746299605,0.9979487006862958,0.9768761108318965,0.045694881839638886,41.72390212509834,experiments/router_metrics_20260511/hat_nativeio_tta_mambairv2_large_ft512_notta_full120/a0p95_raw.csv

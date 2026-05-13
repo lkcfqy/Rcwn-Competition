@@ -1,0 +1,3 @@
+route,weight_hat_a,weight_hat_b,weight_mamba,interp,blend_interp,sharpen_amount,sharpen_radius,clip_mode,psnr,ssim,edge,lpips,proxy,metrics_csv
+wa0p6_wb0p3_wm0p1_raw,0.6,0.3,0.1,,0.0,0.0,1.0,hard,33.883210883524214,0.9979764252901078,0.9769042258461317,0.04657048818238157,41.73173691059235,experiments/router_metrics_20260511/hat_hat_mambairv2_large_notta_full120/wa0p6_wb0p3_wm0p1_raw.csv
+wa0p55_wb0p35_wm0p1_raw,0.55,0.35,0.1,,0.0,0.0,1.0,hard,33.88320662987702,0.9979767431815465,0.9769030506412189,0.04657343304910076,41.731726324150536,experiments/router_metrics_20260511/hat_hat_mambairv2_large_notta_full120/wa0p55_wb0p35_wm0p1_raw.csv

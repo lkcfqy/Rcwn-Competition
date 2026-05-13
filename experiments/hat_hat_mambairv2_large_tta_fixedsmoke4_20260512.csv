@@ -1,0 +1,5 @@
+route,weight_hat_a,weight_hat_b,weight_mamba,interp,blend_interp,sharpen_amount,sharpen_radius,clip_mode,psnr,ssim,edge,lpips,proxy,metrics_csv
+wa0p55_wb0p35_wm0p1_raw,0.55,0.35,0.1,,0.0,0.0,1.0,hard,37.6001596613022,0.9987053871154785,0.9882856160402298,0.026990295387804508,45.51498262529992,experiments/router_metrics_20260512/hat_hat_mambairv2_large_tta_fixedsmoke4/wa0p55_wb0p35_wm0p1_raw.csv
+wa0p6_wb0p3_wm0p1_raw,0.6,0.3,0.1,,0.0,0.0,1.0,hard,37.59911655945654,0.9987050145864487,0.9882854223251343,0.026995091466233134,45.513927308693034,experiments/router_metrics_20260512/hat_hat_mambairv2_large_tta_fixedsmoke4/wa0p6_wb0p3_wm0p1_raw.csv
+wa0p6_wb0p35_wm0p05_raw,0.6,0.35,0.05,,0.0,0.0,1.0,hard,37.5980944819812,0.9986996352672577,0.9882795363664627,0.026467515854164958,45.51391633460934,experiments/router_metrics_20260512/hat_hat_mambairv2_large_tta_fixedsmoke4/wa0p6_wb0p35_wm0p05_raw.csv
+wa0p65_wb0p3_wm0p05_raw,0.65,0.3,0.05,,0.0,0.0,1.0,hard,37.596910075944955,0.998698502779007,0.9882794916629791,0.026472665136680007,45.512714745671595,experiments/router_metrics_20260512/hat_hat_mambairv2_large_tta_fixedsmoke4/wa0p65_wb0p3_wm0p05_raw.csv

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import sys
 from pathlib import Path
@@ -75,7 +76,11 @@ def validate(args: Any) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
     split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip()]
+    else:
+        names = split.val[: args.limit] if args.limit else split.val
     print(f"val={len(names)} target_scale=x{args.scale}")
 
     descriptor = ModelLoader(device=device).load_from_file(args.weights)
@@ -96,6 +101,7 @@ def validate(args: Any) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums: dict[str, float] = {}
+    rows: list[dict[str, float | str]] = []
     for name in tqdm(names, desc="val", leave=False):
         lr, hr = load_pair(args.data, name, args.scale, device)
         inp = make_input(lr, descriptor.input_channels)
@@ -103,12 +109,23 @@ def validate(args: Any) -> None:
         out = downsample_to_target(out, hr.shape[-2:], args.downsample)
         pred = rgb_to_gray(out, args.gray_mode)
         metrics = measure_batch(pred.float(), hr, edge_metric, lpips_fn)
+        row = {"name": name, **metrics, "proxy": metric_proxy(metrics)}
+        rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out_metrics = {key: value / len(names) for key, value in sums.items()}
     out_metrics["proxy"] = metric_proxy(out_metrics)
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out_metrics.items()))
+    if args.metrics_csv:
+        Path(args.metrics_csv).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.metrics_csv, "w", newline="", encoding="utf-8") as handle:
+            fieldnames = ["name", "psnr", "ssim", "edge", "lpips", "proxy"]
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({key: row.get(key, "") for key in fieldnames})
+        print(f"metrics_csv={args.metrics_csv}")
 
 
 def parse_args() -> Any:
@@ -120,6 +137,8 @@ def parse_args() -> Any:
     parser.add_argument("--downsample", choices=["bicubic", "area"], default="bicubic")
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file", default="")
+    parser.add_argument("--metrics-csv", default="")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")
     parser.add_argument("--cpu", action="store_true")

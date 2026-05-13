@@ -49,6 +49,8 @@ def default_param_key(family: str) -> str:
         return "params"
     if family == "catanet":
         return "params"
+    if family == "sst":
+        return "params_ema"
     raise ValueError(f"Unsupported family: {family}")
 
 
@@ -327,6 +329,12 @@ def build_catanet(scale: int) -> torch.nn.Module:
     return CATANet(upscale=scale)
 
 
+def build_sst(variant: str, scale: int) -> torch.nn.Module:
+    from evaluate_sst_gray import build_sst as _build_sst
+
+    return _build_sst(variant, scale)
+
+
 def build_model(family: str, variant: str, scale: int, use_checkpoint: bool = False) -> torch.nn.Module:
     if family == "grl":
         return build_grl(variant, scale)
@@ -338,6 +346,8 @@ def build_model(family: str, variant: str, scale: int, use_checkpoint: bool = Fa
         return build_swin2sr(scale, use_checkpoint)
     if family == "catanet":
         return build_catanet(scale)
+    if family == "sst":
+        return build_sst(variant, scale)
     raise ValueError(f"Unsupported family: {family}")
 
 
@@ -372,6 +382,6 @@ def forward_gray(
     out = model(lr_rgb)
     if isinstance(out, tuple):
         out = out[0]
-    if family in {"rgt", "catanet"}:
+    if family in {"rgt", "catanet", "sst"}:
         out = out[..., : lr_gray.shape[-2] * scale, : lr_gray.shape[-1] * scale]
     return rgb_tensor_to_gray(out, gray_mode)

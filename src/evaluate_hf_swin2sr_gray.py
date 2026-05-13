@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import sys
 from contextlib import nullcontext
@@ -62,12 +63,18 @@ def rgb_to_gray(x: torch.Tensor, mode: str) -> torch.Tensor:
 def validate(args: argparse.Namespace) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    else:
+        names = split.val
+    names = names[: args.limit] if args.limit else names
     print(f"device={device} val={len(names)} scale=x{args.scale}")
 
-    processor = AutoImageProcessor.from_pretrained(args.model)
+    processor_source = args.processor_model or args.model
+    processor = AutoImageProcessor.from_pretrained(processor_source)
     model = AutoModelForImageToImage.from_pretrained(args.model).to(device).eval()
-    print(f"loaded={args.model}")
+    print(f"loaded={args.model} processor={processor_source}")
 
     edge_metric = EdgeMetric().to(device)
     lpips_fn = None
@@ -77,6 +84,7 @@ def validate(args: argparse.Namespace) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    metric_rows: list[dict[str, float | str]] = []
     lr_dir = Path(args.data) / "input_320"
     for name in tqdm(names, desc="val", leave=False):
         _, hr = load_pair(args.data, name, args.scale, device)
@@ -89,11 +97,24 @@ def validate(args: argparse.Namespace) -> None:
         pred = pred[..., : height * args.scale, : width * args.scale].clamp(0, 1)
         pred = rgb_to_gray(pred.float(), args.gray_mode)
         metrics = measure_batch(pred, hr, edge_metric, lpips_fn)
+        if args.metrics_csv:
+            row: dict[str, float | str] = {"name": name}
+            row.update(metrics)
+            row["proxy"] = metric_proxy(metrics)
+            metric_rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
+    if args.metrics_csv:
+        out_path = Path(args.metrics_csv)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["name", "psnr", "ssim", "edge", "lpips", "proxy"])
+            writer.writeheader()
+            writer.writerows(metric_rows)
+        print(f"metrics_csv={out_path}")
     print("val_result " + " ".join(f"{key}={value:.5f}" for key, value in out.items()))
 
 
@@ -102,9 +123,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data", default="/home/lkc/lkcproject/rcwn/超分竞赛数据集/训练数据集")
     parser.add_argument("--scale", type=int, choices=[2], default=2)
     parser.add_argument("--model", default="caidas/swin2SR-classical-sr-x2-64")
+    parser.add_argument("--processor-model", default="")
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file")
+    parser.add_argument("--metrics-csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")

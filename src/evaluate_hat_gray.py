@@ -31,6 +31,8 @@ def _prefer_torch_cuda_libs() -> None:
 _prefer_torch_cuda_libs()
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from tqdm import tqdm
 
 from dataset import load_pair, make_split
@@ -44,6 +46,72 @@ def autocast_context(device: torch.device, amp: str):
         return nullcontext()
     dtype = torch.bfloat16 if amp == "bf16" else torch.float16
     return torch.autocast(device_type="cuda", dtype=dtype)
+
+
+class TLCAvgPool2d(nn.Module):
+    def __init__(
+        self,
+        kernel_size: tuple[int, int] | None = None,
+        base_size: tuple[int, int] | None = None,
+        train_size: tuple[int, int] | None = None,
+        auto_pad: bool = True,
+    ):
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.base_size = base_size
+        self.train_size = train_size
+        self.auto_pad = auto_pad
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        kernel_size = self.kernel_size
+        if kernel_size is None:
+            if self.base_size is None or self.train_size is None:
+                raise ValueError("TLC pool requires kernel_size or base_size+train_size.")
+            kernel_size = (
+                max(1, x.shape[-2] * self.base_size[0] // self.train_size[0]),
+                max(1, x.shape[-1] * self.base_size[1] // self.train_size[1]),
+            )
+        if kernel_size[0] >= x.shape[-2] and kernel_size[1] >= x.shape[-1]:
+            return F.adaptive_avg_pool2d(x, 1)
+        n, c, h, w = x.shape
+        summed = x.cumsum(dim=-1).cumsum_(dim=-2)
+        summed = F.pad(summed, (1, 0, 1, 0))
+        k1, k2 = min(h, kernel_size[0]), min(w, kernel_size[1])
+        out = (
+            summed[:, :, k1:, k2:]
+            + summed[:, :, :-k1, :-k2]
+            - summed[:, :, :-k1, k2:]
+            - summed[:, :, k1:, :-k2]
+        ) / float(k1 * k2)
+        if self.auto_pad:
+            out_h, out_w = out.shape[-2:]
+            pad = ((w - out_w) // 2, (w - out_w + 1) // 2, (h - out_h) // 2, (h - out_h + 1) // 2)
+            out = F.pad(out, pad, mode="replicate")
+        return out
+
+
+def parse_hw(raw: str) -> tuple[int, int]:
+    parts = raw.replace("x", ",").replace(":", ",").split(",")
+    parts = [part.strip() for part in parts if part.strip()]
+    if len(parts) == 1:
+        value = int(parts[0])
+        return value, value
+    if len(parts) == 2:
+        return int(parts[0]), int(parts[1])
+    raise ValueError(f"Expected H,W pair, got: {raw}")
+
+
+def apply_tlc_pool(model: torch.nn.Module, base_size: tuple[int, int], train_size: tuple[int, int]) -> int:
+    count = 0
+    for name, module in model.named_children():
+        if len(list(module.children())) > 0:
+            count += apply_tlc_pool(module, base_size, train_size)
+        if isinstance(module, nn.AdaptiveAvgPool2d):
+            if module.output_size != 1:
+                raise ValueError(f"Unsupported AdaptiveAvgPool2d output_size={module.output_size}")
+            setattr(model, name, TLCAvgPool2d(base_size=base_size, train_size=train_size))
+            count += 1
+    return count
 
 
 def rgb_to_gray(x: torch.Tensor, mode: str) -> torch.Tensor:
@@ -86,6 +154,45 @@ def _forward_gray_once(
     return forward_hat_gray(model, lr_gray, scale, gray_mode, window_size=window_size, native_io=native_io)
 
 
+def _tile_starts(size: int, tile_size: int, overlap: int) -> list[int]:
+    if tile_size <= 0 or tile_size >= size:
+        return [0]
+    stride = max(1, tile_size - overlap)
+    starts = list(range(0, max(1, size - tile_size + 1), stride))
+    last = size - tile_size
+    if starts[-1] != last:
+        starts.append(last)
+    return starts
+
+
+def _forward_gray_tiled_once(
+    model: torch.nn.Module,
+    lr_gray: torch.Tensor,
+    scale: int,
+    gray_mode: str,
+    window_size: int,
+    native_io: bool,
+    tile_size: int,
+    tile_overlap: int,
+) -> torch.Tensor:
+    _, _, h, w = lr_gray.shape
+    if tile_size <= 0 or (tile_size >= h and tile_size >= w):
+        return _forward_gray_once(model, lr_gray, scale, gray_mode, window_size, native_io=native_io)
+    if tile_overlap < 0 or tile_overlap >= tile_size:
+        raise ValueError(f"tile_overlap must be in [0, tile_size): {tile_overlap} vs {tile_size}")
+    out = lr_gray.new_zeros((lr_gray.shape[0], 1, h * scale, w * scale))
+    weight = lr_gray.new_zeros((lr_gray.shape[0], 1, h * scale, w * scale))
+    for top in _tile_starts(h, tile_size, tile_overlap):
+        for left in _tile_starts(w, tile_size, tile_overlap):
+            tile = lr_gray[..., top : top + tile_size, left : left + tile_size]
+            pred = _forward_gray_once(model, tile, scale, gray_mode, window_size, native_io=native_io)
+            out_top = top * scale
+            out_left = left * scale
+            out[..., out_top : out_top + pred.shape[-2], out_left : out_left + pred.shape[-1]] += pred
+            weight[..., out_top : out_top + pred.shape[-2], out_left : out_left + pred.shape[-1]] += 1.0
+    return out / weight.clamp_min(1.0)
+
+
 def forward_gray(
     model: torch.nn.Module,
     lr_gray: torch.Tensor,
@@ -94,12 +201,32 @@ def forward_gray(
     window_size: int = 16,
     tta: bool = False,
     native_io: bool = False,
+    tile_size: int = 0,
+    tile_overlap: int = 16,
 ):
     if not tta:
-        return _forward_gray_once(model, lr_gray, scale, gray_mode, window_size, native_io=native_io)
+        return _forward_gray_tiled_once(
+            model,
+            lr_gray,
+            scale,
+            gray_mode,
+            window_size,
+            native_io,
+            tile_size,
+            tile_overlap,
+        )
     preds = []
     for mode in range(8):
-        pred = _forward_gray_once(model, _aug(lr_gray, mode), scale, gray_mode, window_size, native_io=native_io)
+        pred = _forward_gray_tiled_once(
+            model,
+            _aug(lr_gray, mode),
+            scale,
+            gray_mode,
+            window_size,
+            native_io,
+            tile_size,
+            tile_overlap,
+        )
         preds.append(_deaug(pred, mode))
     return torch.stack(preds).mean(dim=0)
 
@@ -141,6 +268,9 @@ def validate(args) -> None:
 
     model = build_hat(args.variant, args.scale, args.use_checkpoint, native_io=args.native_io).to(device).eval()
     load_hat_weights(model, args.weights, args.param_key, native_io=args.native_io, gray_mode=args.gray_mode)
+    if args.tlc_base_size:
+        tlc_count = apply_tlc_pool(model, parse_hw(args.tlc_base_size), parse_hw(args.tlc_train_size))
+        print(f"tlc_pool_replaced={tlc_count} base_size={args.tlc_base_size} train_size={args.tlc_train_size}")
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"params={n_params:.2f}M preset=hat_{args.variant}")
     print(f"loaded={args.weights} param_key={args.param_key}")
@@ -166,7 +296,16 @@ def validate(args) -> None:
             args.input_gamma,
         )
         with autocast_context(device, args.amp):
-            pred = forward_gray(model, model_lr, args.scale, args.gray_mode, tta=args.tta, native_io=args.native_io)
+            pred = forward_gray(
+                model,
+                model_lr,
+                args.scale,
+                args.gray_mode,
+                tta=args.tta,
+                native_io=args.native_io,
+                tile_size=args.tile_size,
+                tile_overlap=args.tile_overlap,
+            )
         if (
             args.blend_interp > 0
             or args.sharpen_amount > 0
@@ -233,6 +372,10 @@ def parse_args():
     parser.add_argument("--back-project-down-sigma", type=float, default=0.0)
     parser.add_argument("--clip-mode", choices=["hard", "match-base", "none"], default="hard")
     parser.add_argument("--tta", action="store_true")
+    parser.add_argument("--tile-size", type=int, default=0)
+    parser.add_argument("--tile-overlap", type=int, default=16)
+    parser.add_argument("--tlc-base-size", default="", help="Replace HAT global average pooling with TLC local pooling, e.g. 32 or 32,32.")
+    parser.add_argument("--tlc-train-size", default="96,96", help="LR train patch size used to scale TLC base size.")
     parser.add_argument("--input-sharpen-amount", type=float, default=0.0)
     parser.add_argument("--input-sharpen-radius", type=float, default=1.0)
     parser.add_argument("--input-blur-sigma", type=float, default=0.0)

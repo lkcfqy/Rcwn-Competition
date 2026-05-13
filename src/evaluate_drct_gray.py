@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import os
 import sys
@@ -38,7 +39,7 @@ from dataset import load_pair, make_split
 from metrics import EdgeMetric, measure_batch, metric_proxy
 
 ROOT = Path(__file__).resolve().parents[1]
-DRCT_ROOT = ROOT / "external_models" / "DRCT"
+DRCT_ROOT = Path(os.environ.get("RCWN_DRCT_ROOT", str(ROOT / "external_models" / "DRCT")))
 
 
 class _Registry:
@@ -164,6 +165,7 @@ def forward_gray(
     target_scale: int,
     gray_mode: str,
     downsample: str,
+    output_index: int,
     window_size: int = 16,
 ):
     lr_rgb = lr_gray.repeat(1, 3, 1, 1)
@@ -174,9 +176,15 @@ def forward_gray(
         lr_rgb = torch.cat([lr_rgb, torch.flip(lr_rgb, [2])], dim=2)[:, :, : h_old + h_pad, :]
     if w_pad:
         lr_rgb = torch.cat([lr_rgb, torch.flip(lr_rgb, [3])], dim=3)[:, :, :, : w_old + w_pad]
-    out = model(lr_rgb)
-    out = out[..., : h_old * model_scale, : w_old * model_scale]
-    if model_scale != target_scale:
+    out_obj = model(lr_rgb)
+    if isinstance(out_obj, (list, tuple)):
+        out = out_obj[output_index]
+        actual_scale = max(1, out.shape[-1] // lr_rgb.shape[-1])
+    else:
+        out = out_obj
+        actual_scale = model_scale
+    out = out[..., : h_old * actual_scale, : w_old * actual_scale]
+    if actual_scale != target_scale:
         mode = "area" if downsample == "area" else "bicubic"
         kwargs = {} if mode == "area" else {"align_corners": False}
         out = F.interpolate(out, size=(h_old * target_scale, w_old * target_scale), mode=mode, **kwargs)
@@ -188,7 +196,11 @@ def validate(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
     split = make_split(args.data, args.target_scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    else:
+        names = split.val[: args.limit] if args.limit else split.val
     print(f"val={len(names)} target_scale=x{args.target_scale} model_scale=x{args.model_scale}")
 
     model = build_drct(args.variant, args.model_scale, args.use_checkpoint).to(device).eval()
@@ -206,6 +218,7 @@ def validate(args) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    metric_rows: list[dict[str, float | str]] = []
     for name in tqdm(names, desc="val", leave=False):
         lr, hr = load_pair(args.data, name, args.target_scale, device)
         with autocast_context(device, args.amp):
@@ -216,13 +229,28 @@ def validate(args) -> None:
                 args.target_scale,
                 args.gray_mode,
                 args.downsample,
+                args.output_index,
             )
         metrics = measure_batch(pred.float(), hr, edge_metric, lpips_fn)
+        one = dict(metrics)
+        one["proxy"] = metric_proxy(one)
+        if args.metrics_csv:
+            row: dict[str, float | str] = {"name": name}
+            row.update(one)
+            metric_rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
+    if args.metrics_csv:
+        out_path = Path(args.metrics_csv)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["name", "psnr", "ssim", "edge", "lpips", "proxy"])
+            writer.writeheader()
+            writer.writerows(metric_rows)
+        print(f"metrics_csv={out_path}")
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out.items()))
 
 
@@ -230,14 +258,17 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default="/home/lkc/lkcproject/rcwn/超分竞赛数据集/训练数据集")
     parser.add_argument("--target-scale", type=int, choices=[2], default=2)
-    parser.add_argument("--model-scale", type=int, choices=[2, 4], default=4)
+    parser.add_argument("--model-scale", type=int, choices=[2, 4, 8], default=4)
     parser.add_argument("--weights", required=True)
     parser.add_argument("--variant", choices=["base", "l"], default="base")
     parser.add_argument("--param-key", default="params_ema")
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")
     parser.add_argument("--downsample", choices=["area", "bicubic"], default="area")
+    parser.add_argument("--output-index", type=int, default=-1)
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file")
+    parser.add_argument("--metrics-csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")

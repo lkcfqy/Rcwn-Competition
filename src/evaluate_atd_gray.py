@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import os
 import sys
@@ -96,26 +97,48 @@ def normalize_state(obj: Any, key: str) -> dict[str, torch.Tensor]:
     return state
 
 
-def build_atd(scale: int, use_checkpoint: bool) -> torch.nn.Module:
-    return ATD(
-        upscale=scale,
-        in_chans=3,
-        img_size=96,
-        embed_dim=216,
-        depths=[6, 6, 6, 6, 6, 6],
-        num_heads=[4, 4, 4, 4, 4, 4],
-        window_size=16,
-        dim_ffn_td=16,
-        category_size=256,
-        num_tokens=512,
-        reducted_dim=16,
-        convffn_kernel_size=5,
-        img_range=1.0,
-        mlp_ratio=2,
-        upsampler="pixelshuffle",
-        resi_connection="1conv",
-        use_checkpoint=use_checkpoint,
-    )
+def build_atd(variant: str, scale: int, use_checkpoint: bool) -> torch.nn.Module:
+    if variant == "base":
+        return ATD(
+            upscale=scale,
+            in_chans=3,
+            img_size=96,
+            embed_dim=216,
+            depths=[6, 6, 6, 6, 6, 6],
+            num_heads=[4, 4, 4, 4, 4, 4],
+            window_size=16,
+            dim_ffn_td=16,
+            category_size=256,
+            num_tokens=512,
+            reducted_dim=16,
+            convffn_kernel_size=5,
+            img_range=1.0,
+            mlp_ratio=2,
+            upsampler="pixelshuffle",
+            resi_connection="1conv",
+            use_checkpoint=use_checkpoint,
+        )
+    if variant == "light":
+        return ATD(
+            upscale=scale,
+            in_chans=3,
+            img_size=64,
+            embed_dim=48,
+            depths=[6, 6, 6, 6],
+            num_heads=[3, 3, 3, 3],
+            window_size=16,
+            dim_ffn_td=4,
+            category_size=128,
+            num_tokens=128,
+            reducted_dim=12,
+            convffn_kernel_size=7,
+            img_range=1.0,
+            mlp_ratio=1,
+            upsampler="pixelshuffledirect",
+            resi_connection="1conv",
+            use_checkpoint=use_checkpoint,
+        )
+    raise ValueError(f"Unsupported ATD variant: {variant}")
 
 
 def rgb_to_gray(x: torch.Tensor, mode: str) -> torch.Tensor:
@@ -138,19 +161,36 @@ def forward_gray(model: torch.nn.Module, lr_gray: torch.Tensor, gray_mode: str) 
     return rgb_to_gray(out, gray_mode)
 
 
+def read_names(args) -> list[str]:
+    split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    else:
+        names = split.val
+    return names[: args.limit] if args.limit else names
+
+
+def write_metrics_csv(path: str, rows: list[dict[str, float | str]]) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["name", "psnr", "ssim", "edge", "lpips", "proxy"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 @torch.no_grad()
 def validate(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
-    split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    names = read_names(args)
     print(f"val={len(names)} scale=x{args.scale}")
 
-    model = build_atd(args.scale, args.use_checkpoint).to(device).eval()
+    model = build_atd(args.variant, args.scale, args.use_checkpoint).to(device).eval()
     ckpt = torch.load(args.weights, map_location="cpu")
     model.load_state_dict(normalize_state(ckpt, args.param_key), strict=True)
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"params={n_params:.2f}M preset=atd_v2")
+    print(f"params={n_params:.2f}M preset=atd_{args.variant}")
     print(f"loaded={args.weights} param_key={args.param_key}")
 
     edge_metric = EdgeMetric().to(device)
@@ -161,16 +201,26 @@ def validate(args) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    rows: list[dict[str, float | str]] = []
     for name in tqdm(names, desc="val", leave=False):
         lr, hr = load_pair(args.data, name, args.scale, device)
         with autocast_context(device, args.amp):
             pred = forward_gray(model, lr, args.gray_mode)
         metrics = measure_batch(pred.float(), hr, edge_metric, lpips_fn)
+        one = dict(metrics)
+        one.setdefault("lpips", 0.0)
+        one["proxy"] = metric_proxy(one)
+        row: dict[str, float | str] = {"name": name}
+        row.update(one)
+        rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
+    if args.metrics_csv:
+        write_metrics_csv(args.metrics_csv, rows)
+        print(f"metrics_csv={args.metrics_csv}")
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out.items()))
 
 
@@ -179,10 +229,13 @@ def parse_args():
     parser.add_argument("--data", default="/home/lkc/lkcproject/rcwn/超分竞赛数据集/训练数据集")
     parser.add_argument("--scale", type=int, choices=[2], default=2)
     parser.add_argument("--weights", required=True)
+    parser.add_argument("--variant", choices=["base", "light"], default="base")
     parser.add_argument("--param-key", default="params_ema")
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file", default="")
+    parser.add_argument("--metrics-csv", default="")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")

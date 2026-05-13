@@ -1,0 +1,5 @@
+route,alpha_hat,interp,blend_interp,sharpen_amount,sharpen_radius,clip_mode,psnr,ssim,edge,lpips,proxy,metrics_csv
+a0p45_raw,0.45,,0.0,0.0,1.0,hard,35.48483298174397,0.9981831446290016,0.9810509905219078,0.03874961794354022,43.358534594674715,experiments/router_metrics_20260512/hat_sstxlarge_dflip_probe40clean_ft128_tta_probe40/a0p45_raw.csv
+a0p5_raw,0.5,,0.0,0.0,1.0,hard,35.484150277917244,0.9981820493936538,0.9810419544577599,0.038726497045718136,43.35787348910325,experiments/router_metrics_20260512/hat_sstxlarge_dflip_probe40clean_ft128_tta_probe40/a0p5_raw.csv
+a0p55_raw,0.55,,0.0,0.0,1.0,hard,35.480382986422256,0.9981797382235527,0.9810212329030037,0.03869858357356861,43.35410671442244,experiments/router_metrics_20260512/hat_sstxlarge_dflip_probe40clean_ft128_tta_probe40/a0p55_raw.csv
+a0p6_raw,0.6,,0.0,0.0,1.0,hard,35.47356489061734,0.9981762439012527,0.980988834798336,0.038666428334545346,43.34726716695244,experiments/router_metrics_20260512/hat_sstxlarge_dflip_probe40clean_ft128_tta_probe40/a0p6_raw.csv

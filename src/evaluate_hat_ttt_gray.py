@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import copy
-import importlib.util
 import os
 import random
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
 
 
 def _prefer_torch_cuda_libs() -> None:
@@ -36,17 +35,10 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from dataset import load_pair, make_split
+from hat_gray_common import build_hat as build_hat_common
+from hat_gray_common import forward_hat_gray, load_hat_weights as load_hat_weights_common
 from metrics import EdgeMetric, measure_batch, metric_proxy
-from runtime import _gaussian_blur, resize_tensor
-
-ROOT = Path(__file__).resolve().parents[1]
-HAT_ROOT = ROOT / "external_models" / "HAT"
-spec = importlib.util.spec_from_file_location("hat_arch_local", HAT_ROOT / "hat" / "archs" / "hat_arch.py")
-if spec is None or spec.loader is None:
-    raise ImportError(f"Could not load HAT from {HAT_ROOT}")
-hat_arch = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(hat_arch)
-HAT = hat_arch.HAT
+from runtime import INTERP, _gaussian_blur, apply_postprocess, interp_tensor, resize_tensor
 
 
 def seed_everything(seed: int) -> None:
@@ -62,61 +54,8 @@ def autocast_context(device: torch.device, amp: str):
     return torch.autocast(device_type="cuda", dtype=dtype)
 
 
-def normalize_state(obj: Any, key: str) -> dict[str, torch.Tensor]:
-    if isinstance(obj, dict) and key in obj:
-        obj = obj[key]
-    elif isinstance(obj, dict) and "state_dict" in obj:
-        obj = obj["state_dict"]
-    if not isinstance(obj, dict):
-        raise TypeError("Checkpoint must be a state dict or contain the requested param key.")
-    state = {}
-    for name, value in obj.items():
-        if name.startswith("module."):
-            name = name[len("module.") :]
-        state[name] = value
-    return state
-
-
-def build_hat(variant: str, scale: int, use_checkpoint: bool) -> torch.nn.Module:
-    if variant == "l":
-        depths = [6] * 12
-    elif variant == "m":
-        depths = [6] * 6
-    else:
-        raise ValueError(f"Unsupported HAT variant: {variant}")
-    return HAT(
-        upscale=scale,
-        in_chans=3,
-        img_size=64,
-        window_size=16,
-        compress_ratio=3,
-        squeeze_factor=30,
-        conv_scale=0.01,
-        overlap_ratio=0.5,
-        img_range=1.0,
-        depths=depths,
-        embed_dim=180,
-        num_heads=[6] * len(depths),
-        mlp_ratio=2,
-        upsampler="pixelshuffle",
-        resi_connection="1conv",
-        use_checkpoint=use_checkpoint,
-    )
-
-
-def rgb_to_gray(x: torch.Tensor, mode: str) -> torch.Tensor:
-    if mode == "avg":
-        return x.mean(dim=1, keepdim=True)
-    if mode == "y":
-        weights = x.new_tensor([0.299, 0.587, 0.114]).view(1, 3, 1, 1)
-        return (x * weights).sum(dim=1, keepdim=True)
-    if mode == "r":
-        return x[:, 0:1]
-    if mode == "g":
-        return x[:, 1:2]
-    if mode == "b":
-        return x[:, 2:3]
-    raise ValueError(f"Unsupported gray mode: {mode}")
+def build_hat(variant: str, scale: int, use_checkpoint: bool, native_io: bool = False) -> torch.nn.Module:
+    return build_hat_common(variant, scale, use_checkpoint, native_io=native_io)
 
 
 def forward_gray(
@@ -125,18 +64,9 @@ def forward_gray(
     scale: int,
     gray_mode: str,
     window_size: int = 16,
+    native_io: bool = False,
 ) -> torch.Tensor:
-    lr_rgb = lr_gray.repeat(1, 3, 1, 1)
-    _, _, h_old, w_old = lr_rgb.shape
-    h_pad = (h_old // window_size + 1) * window_size - h_old
-    w_pad = (w_old // window_size + 1) * window_size - w_old
-    if h_pad:
-        lr_rgb = torch.cat([lr_rgb, torch.flip(lr_rgb, [2])], dim=2)[:, :, : h_old + h_pad, :]
-    if w_pad:
-        lr_rgb = torch.cat([lr_rgb, torch.flip(lr_rgb, [3])], dim=3)[:, :, :, : w_old + w_pad]
-    out = model(lr_rgb)
-    out = out[..., : h_old * scale, : w_old * scale]
-    return rgb_to_gray(out, gray_mode)
+    return forward_hat_gray(model, lr_gray, scale, gray_mode, window_size=window_size, native_io=native_io)
 
 
 def set_train_scope(model: torch.nn.Module, scope: str) -> list[torch.nn.Parameter]:
@@ -189,7 +119,7 @@ def adapt_on_lr(model: torch.nn.Module, lr: torch.Tensor, args) -> float:
         source = make_self_lr(target, args.self_down_sigma, args.self_down_interp, args.scale)
         opt.zero_grad(set_to_none=True)
         with autocast_context(lr.device, args.amp):
-            pred = forward_gray(model, source, args.scale, args.gray_mode)
+            pred = forward_gray(model, source, args.scale, args.gray_mode, native_io=args.native_io)
             loss = F.l1_loss(pred.float(), target.float())
         loss.backward()
         if args.grad_clip > 0:
@@ -203,7 +133,10 @@ def adapt_on_lr(model: torch.nn.Module, lr: torch.Tensor, args) -> float:
 def eval_one(model, lr, hr, edge_metric, lpips_fn, args) -> dict[str, float]:
     model.eval()
     with autocast_context(lr.device, args.amp):
-        pred = forward_gray(model, lr, args.scale, args.gray_mode)
+        pred = forward_gray(model, lr, args.scale, args.gray_mode, native_io=args.native_io)
+    if args.blend_interp > 0:
+        base = interp_tensor(lr, args.scale, args.interp)
+        pred = apply_postprocess(pred.float(), base, lr=lr, blend_interp=args.blend_interp)
     return measure_batch(pred.float(), hr, edge_metric, lpips_fn)
 
 
@@ -212,16 +145,19 @@ def validate(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
     split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    else:
+        names = split.val[: args.limit] if args.limit else split.val
     print(f"val={len(names)} scale=x{args.scale}")
 
-    base_model = build_hat(args.variant, args.scale, args.use_checkpoint).to(device)
-    ckpt = torch.load(args.weights, map_location="cpu")
-    base_state = normalize_state(ckpt, args.param_key)
-    base_model.load_state_dict(base_state, strict=True)
+    base_model = build_hat(args.variant, args.scale, args.use_checkpoint, native_io=args.native_io).to(device)
+    load_hat_weights_common(base_model, args.weights, args.param_key, native_io=args.native_io, gray_mode=args.gray_mode)
+    base_state = {key: value.detach().cpu().clone() for key, value in base_model.state_dict().items()}
     n_params = sum(p.numel() for p in base_model.parameters()) / 1e6
     print(f"params={n_params:.2f}M preset=hat_{args.variant}")
-    print(f"loaded={args.weights} param_key={args.param_key}")
+    print(f"loaded={args.weights} param_key={args.param_key} native_io={args.native_io}")
     print(
         f"ttt steps={args.ttt_steps} lr={args.ttt_lr:g} scope={args.train_scope} "
         f"patch={args.self_patch_size} down=sigma{args.self_down_sigma:g}+{args.self_down_interp}"
@@ -236,6 +172,7 @@ def validate(args) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    metric_rows: list[dict[str, float | str]] = []
     self_loss_sum = 0.0
     for idx, name in enumerate(tqdm(names, desc="val", leave=False)):
         lr, hr = load_pair(args.data, name, args.scale, device)
@@ -244,6 +181,12 @@ def validate(args) -> None:
         self_loss = adapt_on_lr(model, lr, args)
         self_loss_sum += self_loss
         metrics = eval_one(model, lr, hr, edge_metric, lpips_fn, args)
+        one = dict(metrics)
+        one["proxy"] = metric_proxy(one)
+        if args.metrics_csv:
+            row: dict[str, float | str] = {"name": name}
+            row.update(one)
+            metric_rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
         print(
@@ -255,6 +198,14 @@ def validate(args) -> None:
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
     out["self_loss"] = self_loss_sum / len(names)
+    if args.metrics_csv:
+        out_path = Path(args.metrics_csv)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["name", "psnr", "ssim", "edge", "lpips", "proxy"])
+            writer.writeheader()
+            writer.writerows(metric_rows)
+        print(f"metrics_csv={out_path}")
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out.items()))
 
 
@@ -266,8 +217,13 @@ def parse_args():
     parser.add_argument("--variant", choices=["l", "m"], default="l")
     parser.add_argument("--param-key", default="state_dict")
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")
+    parser.add_argument("--native-io", action="store_true")
+    parser.add_argument("--interp", choices=sorted(INTERP), default="lanczos")
+    parser.add_argument("--blend-interp", type=float, default=0.0)
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file")
+    parser.add_argument("--metrics-csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="none")

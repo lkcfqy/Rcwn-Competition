@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import sys
 from contextlib import nullcontext
@@ -63,6 +64,14 @@ def normalize_state(obj: Any, key: str) -> dict[str, torch.Tensor]:
             name = name[len("module.") :]
         state[name] = value
     return state
+
+
+def load_checkpoint(path: str) -> dict[str, torch.Tensor] | dict[str, Any]:
+    if path.endswith(".safetensors"):
+        from safetensors.torch import load_file
+
+        return load_file(path, device="cpu")
+    return torch.load(path, map_location="cpu")
 
 
 def build_dat(variant: str, scale: int, use_checkpoint: bool) -> torch.nn.Module:
@@ -132,11 +141,15 @@ def validate(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
     split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    else:
+        names = split.val[: args.limit] if args.limit else split.val
     print(f"val={len(names)} scale=x{args.scale}")
 
     model = build_dat(args.variant, args.scale, args.use_checkpoint).to(device).eval()
-    ckpt = torch.load(args.weights, map_location="cpu")
+    ckpt = load_checkpoint(args.weights)
     model.load_state_dict(normalize_state(ckpt, args.param_key), strict=True)
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"params={n_params:.2f}M preset={args.variant}")
@@ -150,16 +163,31 @@ def validate(args) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    metric_rows: list[dict[str, float | str]] = []
     for name in tqdm(names, desc="val", leave=False):
         lr, hr = load_pair(args.data, name, args.scale, device)
         with autocast_context(device, args.amp):
             pred = forward_gray(model, lr, args.scale, args.gray_mode, args.pad_multiple)
         metrics = measure_batch(pred.float(), hr, edge_metric, lpips_fn)
+        one = dict(metrics)
+        one["proxy"] = metric_proxy(one)
+        if args.metrics_csv:
+            row: dict[str, float | str] = {"name": name}
+            row.update(one)
+            metric_rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
+    if args.metrics_csv:
+        out_path = Path(args.metrics_csv)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["name", "psnr", "ssim", "edge", "lpips", "proxy"])
+            writer.writeheader()
+            writer.writerows(metric_rows)
+        print(f"metrics_csv={out_path}")
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out.items()))
 
 
@@ -174,6 +202,8 @@ def parse_args():
     parser.add_argument("--pad-multiple", type=int, default=32)
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file")
+    parser.add_argument("--metrics-csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")

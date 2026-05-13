@@ -1,18 +1,127 @@
 # RCWN 冲分记录
 
-更新时间：2026-05-10
+更新时间：2026-05-13
 
 ## 当前目标
-- 第一阶段 x2，目标线上 70+。
-- 当前已知第一名：65.5472。
-- 当前已知本人最好线上分：65.4881。
-- 距第一名差距：0.0591。
+- 第一阶段 x2，长期理想目标仍是线上 70+，但按当前合法证据现实目标先冲 `66/67`。
+- 当前已知第一名：65.6323。
+- 当前已知本人最好合法线上分：65.9109。
+- 已超过已知 65.6323，领先 +0.2786；下一目标继续合法冲 66/67。
 
 ## 当前总策略
-- 保留一条低风险合法慢爬主线，持续把当前 best 往上抬。
-- 但如果目标是 `70+`，主目标必须是找到结构性大跳的模型/训练信号，而不是无限续训当前线。
-- 当前把 `native-io HAT-L` 视为新的保底 clean-best 主线；同时把“大跳模型/大跳训练信号”视为真正的冲分主目标。
-- 普通 `+0.00x` 本地涨幅不打包、不提交。
+- 普通 HAT continuation 已冻结：`trainall1800 + blend002` 线上只到 `65.5414`，确认没有 `70+` 斜率。
+- clean-vs-trainall A/B 已完成：`submission/fqy_hat_l_nativeio_lr8e8_blend002.zip` 线上 `65.5408`，低于 train-all `65.5414`。
+- fixed HAT/HAT/SST-TTA raw 包已线上 `65.9109`，超过已知 `65.6323`；后续继续离线找最后 `+0.0891` 到 `66` 的信号。
+- 65.9109 反馈后，`src/rank_platform_candidates.py` 重排显示 SST-TTA raw 同族仍在 ridge 第一梯队；当前 best 仍未稳过 `66`。
+- 合法路线限定不变：纯模型、公开权重/公开数据、官方数据训练、LR-only 后处理、合法 ensemble；不做 nearest HR replacement 或 retrieval/reference 包。
+
+## 2026-05-12 继续冲 `66/67`：大 patch 训练、CAT-R、低 Mamba fine smoke 均无强信号
+- official clean HAT-L 大 patch 探针：
+  - `p128`：`logs/train_x2_hat_l_nativeio_probe40_limit512_p128_lr8e8_20260512.log`，初始 probe40 复现 `43.09584`，第一步训练 CUDA OOM，关闭。
+  - `p112`：`logs/train_x2_hat_l_nativeio_probe40_limit512_p112_lr8e8_20260512.log`，初始 probe40 同为 `43.09584`，第一步训练 CUDA OOM，关闭。
+  - 追加 `--use-checkpoint` 复核：
+    - `p112` smoke16：`logs/train_x2_hat_l_nativeio_p112_ckpt_smoke16_20260512.log`，仍在 overlap attention 第一步 CUDA OOM，关闭。
+    - `p104` smoke16：`45.38785`，只比 no-TTA raw smoke `45.38694` 高 `+0.00091`。
+    - `p104` 正式 probe40：`logs/train_x2_hat_l_nativeio_official_probe40_limit512_p104_ckpt_lr8e8_20260512.log`，`43.09584 -> 43.09516`，delta `-0.00069`，关闭。
+  - 判断：gradient checkpointing 只能勉强让 `p104` 跑完，但没有泛化增益；大 patch 训练线关闭，不进 full120/TTA/打包。
+- 公开 CAT-R / CAT-R2 x2 权重 Stage A smoke4：
+  - CAT-R：`experiments/router_metrics_20260512/cat_r_x2_official_smoke4.csv`，proxy `44.50241`
+  - CAT-R2：`experiments/router_metrics_20260512/cat_r2_x2_official_smoke4.csv`，proxy `44.50670`
+  - 均低于 Stage A `45.20` 和 HAT/HAT-HAT 口径，关闭。
+- 三路 HAT/HAT/MambaIRv2 低 Mamba 细网格 smoke4：
+  - summary：`experiments/hat_hat_mambairv2_lowmamba_fine_smoke4_20260512.csv`
+  - metrics dir：`experiments/router_metrics_20260512/hat_hat_mambairv2_lowmamba_fine_smoke4/`
+  - 最好：current native-io HAT 8-TTA `0.55` + previous non-native HAT 8-TTA `0.375` + MambaIRv2-Large non-TTA `0.075` raw，smoke4 `45.51573`
+  - 只比旧三路 smoke best `45.51503` 高 `+0.00070`；同族 `0.575/0.35/0.075` 已有 full120 `41.73081` 且 ridge 低于已提交 fixed low-Mamba。
+  - 决策：不进 test 打包；除非后续需要极限小刷，可再考虑 probe40/full120，但当前不是 `66` 强信号。
+- 三路 HAT/HAT/MambaIRv2 sharpening smoke：
+  - summary：`experiments/hat_hat_mambairv2_sharpen_smoke4_20260512.csv`
+  - metrics dir：`experiments/router_metrics_20260512/hat_hat_mambairv2_sharpen_smoke4/`
+  - 结果：最好仍是 `0.55/0.375/0.075 raw = 45.51597`；所有 `sharpen_amount=0.01~0.05` 路由都低于对应 raw。
+  - 结论：sharpening 能略降 LPIPS，但 PSNR/proxy 损失更大；不进 probe40/full120。
+- 三路 HAT/HAT/MambaIRv2-Base sanity：
+  - summary：`experiments/hat_hat_mambairv2_base_notta_smoke4_20260512.csv`
+  - metrics dir：`experiments/router_metrics_20260512/hat_hat_mambairv2_base_notta_smoke4/`
+  - 最好：`0.55/0.375/0.075 raw = 45.51169`
+  - 结论：明显低于 MambaIRv2-Large 三路/fine raw 的 `45.515+`，关闭，不进 probe40。
+- 三路 MambaIRv2-Large highpass residual：
+  - `src/evaluate_hat_hat_mambair_ensemble.py` 新增 `--mamba-mix-mode highpass` / `--mamba-residual-sigmas`，用于把 Mamba 分支作为高频残差注入 HAT-HAT 基底。
+  - summary：`experiments/hat_hat_mambairv2_highpass_smoke4_20260512.csv`
+  - metrics dir：`experiments/router_metrics_20260512/hat_hat_mambairv2_highpass_smoke4/`
+  - 最好：`0.55/0.375/0.075 hp sigma=2 = 45.51482`
+  - 结论：低于 raw fine `45.51597`；Mamba 的低频贡献不能简单滤掉，highpass 关闭，不进 probe40/full120。
+- PFT-light x2 official smoke4 补记：
+  - log：`logs/eval_pft_light_x2_official_smoke4_20260512.log`
+  - proxy：`44.13180`
+  - 结论：低于 Stage A `45.20`，关闭。
+- MambaIRv2-Large 输出灰度投影 sweep：
+  - log：`logs/eval_mambairv2_large_graymodes_smoke4_20260512.log`
+  - smoke4：`avg 44.55894 / y 44.54957 / r 44.54197 / g 44.53293 / b 44.53245`
+  - 结论：默认 `avg` 仍最好，不改三路 ensemble。
+- 三路 HAT/HAT/ft512-MambaIRv2 固定切片复核：
+  - fixed smoke4 summary：`experiments/hat_hat_mambairv2_ft512_fixedsmoke4_20260512.csv`
+  - fixed smoke4 最好：current native-io HAT 8-TTA `0.55` + previous non-native HAT 8-TTA `0.35` + ft512 MambaIRv2-Large non-TTA `0.10` raw，`45.52136`；相对旧三路 Mamba non-TTA best `45.51503` 为 `+0.00633`，因此晋级 probe40。
+  - fixed probe40 summary：`experiments/hat_hat_mambairv2_ft512_probe40_20260512.csv`
+  - fixed probe40 最好：`0.55/0.35/0.10 raw = 43.20766`，低于旧三路 probe40 `43.20913`；`0.60/0.30/0.10 raw = 43.20755`，其余低 Mamba 权重更低。
+  - 结论：ft512-Mamba 三路增益只在 smoke4 局部成立，probe40 回落；关闭，不进 full120，不生成 test PNG/zip。此前误用 `--limit` 的非固定切片 scratch 结果不可与历史 smoke4 对比，已忽略。
+- 已下载公开权重小洞补扫：
+  - `src/evaluate_pft_gray.py` 与 `src/evaluate_psrgan_gray.py` 新增 `--names-file/--metrics-csv`，后续固定 smoke4 不再混用 `--limit` 非固定切片。
+  - HAFFIR ImageNet x2：`experiments/router_metrics_20260512/haffir_imagenet_x2_fixedsmoke4.csv`，fixed smoke4 `44.93581`，低于 Stage A `45.20`，关闭。
+  - HAT 8-TTA + HAFFIR ImageNet x2：`experiments/hat_tta_haffir_imagenet_x2_fixedsmoke4_20260512.csv`，最好 `alpha_hat=0.95 raw = 45.49639`，低于 HAT-HAT/Mamba 主线，关闭。
+  - PFT full x2：`experiments/router_metrics_20260512/pft_full_x2_fixedsmoke4.csv`，fixed smoke4 `44.59024`，低于 Stage A，关闭；该自定义 SMM op 不支持 bf16，需 `--amp off`。
+  - PSRGAN `75000_G`：x2 evaluator 加载失败，权重 tail 为 x4 头；x4→x2 路线此前整体弱，记为 `closed_x4_head`，不补 full eval。
+- HF Swin2SR caidas 补扫：
+  - `src/evaluate_hf_swin2sr_gray.py` 新增 `--names-file/--metrics-csv`。
+  - `caidas/swin2SR-classical-sr-x2-64` fixed smoke4：`44.37165`。
+  - `caidas/swin2SR-lightweight-x2-64` fixed smoke4：`44.09210`。
+  - `wrice/swin2sr-ffhq` 与 `wrice/swin2sr-laion-hd` 缺 processor，使用 caidas Swin2SR processor fallback 后 fixed smoke4 只有 `11.95274 / 11.90468`，明显尺度/域不适配。
+  - 均低于 Stage A `45.20`，关闭。
+- HF ONNX 补扫：
+  - 下载 `Xenova/2x_APISR_RRDB_GAN_generator-onnx` 到 `external_models/HF_weights/Xenova_2x_APISR_RRDB_GAN_generator_onnx/`。
+  - fixed smoke4：`31.04814`；首次跑 CUDA metrics 触发 ORT/torch 库冲突，使用 `--cpu-metrics` 复跑成功。
+  - GAN 风格/域不适配，关闭。
+- 三路 HAT/HAT/MambaIRv2 输出端 tone sweep：
+  - `src/evaluate_hat_hat_mambair_ensemble.py` 新增默认关闭的 `--tone-gammas/--tone-gains/--tone-biases`。
+  - summary：`experiments/hat_hat_mambairv2_tone_fixedsmoke4_20260512.csv`
+  - sweep：`gamma 0.985/0.995/1.0/1.005/1.015`、`gain 0.998/1.0/1.002`、`bias -0.001/0/0.001`，权重只测 `0.55/0.35/0.10` 与 `0.60/0.35/0.05`。
+  - 结果：最佳仍是原始 raw；所有 tone/gain/bias 组合均低于 raw，关闭，不进 probe40/full120。
+
+## 2026-05-12 继续冲 `66/67`：三路 Mamba-TTA 复核关闭
+- 启动复核：
+  - 按启动清单读取 `HANDOFF.md`、`PROJECT_LOG.md`、`experiments/probe_summary_20260510.csv`、`experiments/submission_log.csv`、`submission/README.md`、`rcwn.md`。
+  - `pgrep -af '[t]rain_hat_gray|[t]rain_generic_gray|[e]valuate_hat_gray|src/[t]rain|src/[e]valuate|src/[m]ake_submission'` 为空；当前无活跃训练/评估进程。
+- 对当前三路 HAT/HAT/MambaIRv2 主线补了一个未关死变量：MambaIRv2-Large 分支也开 8-TTA，只做固定 smoke4，不生成 test PNG/zip。
+  - summary：`experiments/hat_hat_mambairv2_large_tta_fixedsmoke4_20260512.csv`
+  - metrics dir：`experiments/router_metrics_20260512/hat_hat_mambairv2_large_tta_fixedsmoke4/`
+  - 最好：current native-io HAT 8-TTA `0.55` + previous non-native HAT 8-TTA `0.35` + MambaIRv2-Large 8-TTA `0.10` raw，fixed smoke4 `45.51498`
+  - 对比同切片三路 Mamba non-TTA best `45.51503` 略低 `-0.00005`；其余 `0.60/0.30/0.10`、`0.60/0.35/0.05`、`0.65/0.30/0.05` 也未反超。
+  - 决策：Mamba-TTA 不进 probe40/full120；三路当前仍以 Mamba non-TTA raw/low-Mamba 口径为准。
+
+## 2026-05-11 继续冲 `66/67`：x4 内部下采样、SWA、refiner、tile 推理均未出强信号
+- 本节发生在 fixed low-Mamba 提交前；当时线上 best 仍为 `65.6804`。
+- x4 模型内部推理后确定性下采样到 x2 的合法性 sanity：
+  - `DAT_2_x4 -> x2`：bicubic `44.55017`，area `44.63012`
+  - `DAT_2_x3 -> x2`：area `42.51445`
+  - `SwinIR DF2K x4 -> x2`：area `44.42676`，bicubic `44.35346`
+  - 全部低于 Stage A `45.20`，关闭；说明 x4 内部输出再降采样没有免费增益。
+- HF / OpenModelDB 补扫：
+  - HF 标准 HAT x2 单模型 `44.66887`；与当前 HAT TTA ensemble 最好 `45.49777`，仍低于 HAT-HAT `45.51113`。
+  - OpenModelDB `DAT_2_x2` 单模型 `44.53943`，关闭。
+  - `CallMeDaniel/NTIRE2026-InfraredSR` 的 RFRSR x4 权重已下载到 `external_models/HF_weights/CallMeDaniel_NTIRE2026-InfraredSR/rfrsr_v10_split_iter46k.pth`，但作者指向的推理仓库当前无法匿名 clone，权重含自定义 PDA/DCN 对齐模块，缺完整代码不稳妥复现；归档，不作为提交路线。
+  - `Kronbii/thermal-super-resolution` 已 clone，但仓库不含 `.pth/.pt/.onnx` 权重，只保留源码观察，不进入 eval-only。
+- HAT 权重空间平均/SWA：
+  - 新增 `src/average_checkpoints.py`。
+  - 当前 native-io + lr15e7 50/50：smoke4 `45.49383`，低于当前 TTA 基线。
+  - 当前 native-io + clean1024 50/50：smoke4 `45.49424`，仍低于当前 TTA 基线 `45.49442`，关闭。
+- HAT refiner 小模型：
+  - 新增 `src/hat_refiner.py`、`src/train_hat_refiner_gray.py`、`src/evaluate_hat_refiner_gray.py`。
+  - probe 配置：冻结当前 native-io HAT，训练 C32D4 零初始化残差 refiner，`train_limit=512`、`patch=96`、`lr=2e-4`。
+  - 结果：no-TTA raw smoke4 带 LPIPS 从 HAT `45.38694` 掉到 refiner `45.38152`，关闭，不跑 TTA/full120。
+- HAT tile/overlap 推理：
+  - `src/evaluate_hat_gray.py` 新增 `--tile-size/--tile-overlap`。
+  - `tile_size=96 overlap=24` no-TTA smoke4 `45.33157`，明显低于 full-image no-TTA `45.38694`，关闭。
+- 本轮结论：
+  - 没有发现接近 `66` 的新合法信号；当前唯一可考虑的下一提交仍只是 HAT-HAT `41.72349` 级别的微小 polishing 候选，预期只会在 `65.68x` 附近。
 
 ## 2026-05-10 Native-IO HAT 切入
 - 先做了合法 `HAT-HAT` ensemble quick sweep：
@@ -58,25 +167,19 @@
   - 当前无活跃训练/评估进程，下一轮若继续合法慢爬，应从 `checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth` 接力。
 
 ## 当前最好已提交版本
-- 提交包：`submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`
-- 平台分：65.4881
-- 相比上一线上最好：+0.3788
-- 提交时间：2026-05-09 早上，今日已用 1 次提交。
-- 模型：HAT-L x2 ImageNet 公开预训练模型 + 官方训练集低学习率微调 epoch4
-- 架构：HAT-L，灰度输入重复为 RGB，输出转灰度；纯模型生成，无训练 HR 替换。
-- 推理：no-TTA，无 sharpen，无 nearest HR replacement。
-- 本地验证：
-  - PSNR：33.766150
-  - SSIM：0.997900
-  - Edge：0.976230
-  - LPIPS：0.046190
-  - proxy：41.613630
+- 提交包：`submission/fqy_hat_l_nativeio_trainall1800_lr8e8_blend002.zip`
+- 平台分：65.5414
+- 相比旧合法线上最好 `65.4881`：+0.0533
+- 模型：native-io HAT-L x2 ImageNet 公开预训练模型 + 官方训练集 train-all 低学习率 finalizer
+- 推理：no-TTA，合法 LR-only `blend_interp=0.02`，无 nearest HR replacement/retrieval。
+- 本地验证：full120 已被 train-all 污染，仅作参考；blend002 proxy `41.64226`
 
 ## 最新合法本地候选
-- 目前合法已提交 best 为 `submission/fqy_hat_l_ft_ep4_pure_rootdir.zip`，平台 `65.4881`。
-- 当前已确认 clean `full120` best checkpoint 为 `checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`，本地 proxy `41.63416`。
+- 目前合法已提交 best 为 `submission/fqy_hat_l_nativeio_trainall1800_lr8e8_blend002.zip`，平台 `65.5414`。
+- 当前已确认 clean `full120` best checkpoint 为 `checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/best_x2.pth`，raw proxy `41.63526`，blend002 proxy `41.64162`。
+- clean-vs-trainall A/B 包已提交：`submission/fqy_hat_l_nativeio_lr8e8_blend002.zip`，平台 `65.5408`。
 - 上一版 incumbent clean best 为 `checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`，本地 proxy `41.63025`。
-- `native-io HAT-L` 已经完成 `1024 -> 1680` clean continuation，并把当前 clean best 再抬了 `+0.00391`；但暂时仍没有明显值得新提交的强信号。
+- `native-io HAT-L` 已经完成 lr8e-8 clean continuation 和 train-all 线上反馈；慢爬小涨确认存在，但不足以冲 70。
 - 后续只推进纯模型、后处理、合法 ensemble、公开数据预训练/微调；不使用训练 HR 直接替换测试输出。
 - 已完成合规探针：`checkpoints_hat_l_official_probe_lr1e5_p48_avg`
   - 日志：`logs/train_x2_hat_l_official_probe_lr1e5_p48_avg.log`
@@ -1837,3 +1940,1115 @@
   - 这说明当前 `ThermalEdgeSR` 这版骨干本身不在正确解空间附近，简单 HAT 蒸馏也拉不起来
   - 当前不进 `full120`，不打包，不继续在 `thermal_edge_{tiny,small}` 这套架构上花 GPU
   - 如果还保留自研方向，下一轮应改成“成熟公开主干的灰度化/轻改造/蒸馏”，而不是继续当前从零骨干
+
+## 2026-05-10 Native-IO HAT 后处理 polishing 复核启动
+- 当前 clean best：
+  - `checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+  - raw clean `full120 proxy 41.63416`
+- 已完成单点复核：
+  - `blend_interp=0.03`
+  - `interp=lanczos`
+  - clean `full120 proxy 41.64051`
+  - 相对 raw clean best `+0.00635`
+- 判断：
+  - 这是合法 LR-only 后处理小涨，适合纳入 polishing/router 分析
+  - 涨幅仍太小，不写入 submission log，不生成 test PNG/zip
+  - 下一步只在 clean `full120` 上补 `raw / blend002 / blend003 / blend004` 逐图 metrics CSV，再用现有 `k3/k4` cluster router 判断是否值得保留
+
+## 2026-05-10 Native-IO 后处理/router 复核完成
+- metrics CSV：
+  - `experiments/router_metrics_20260510/nativeio_raw.csv`
+  - `experiments/router_metrics_20260510/nativeio_blend002.csv`
+  - `experiments/router_metrics_20260510/nativeio_blend003.csv`
+  - `experiments/router_metrics_20260510/nativeio_blend004.csv`
+- full120 clean 全局 proxy：
+  - raw：`41.63416`
+  - `blend002`：`41.64055`
+  - `blend003`：`41.64051`
+  - `blend004`：`41.63827`
+- router：
+  - `k3` selected `41.63819`，gain `+0.00403`，oracle `41.64985`
+  - `k4` selected `41.64312`，gain `+0.00896`，oracle `41.64985`
+- 判断：
+  - blend/router 都是合法 polishing，但没有提交级强信号
+  - 不迁移到 test，不写 submission log
+
+## 2026-05-10 Native-IO HAT-L lr8e-8 continuation 完成
+- 输出：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg`
+- 起点：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`
+- 配置：`official-only`、`native-io`、`train_limit=1680`、`patch=96`、`epochs=1`、`lr=8e-8`、`min_lr=3e-8`、`val_full120_seed42`
+- summary CSV：
+  - `initial_val 41.634160147840625`
+  - `final_val 41.635262772570364`
+  - `delta +0.001102624729739432`
+  - `promoted_or_closed archived`
+- checkpoint 复核：
+  - raw metrics：`experiments/router_metrics_20260510/nativeio_lr8e8_raw.csv`
+  - raw：`PSNR 33.78492 / SSIM 0.99789 / Edge 0.97648 / LPIPS 0.04500 / proxy 41.63525`
+  - blend002 metrics：`experiments/router_metrics_20260510/nativeio_lr8e8_blend002.csv`
+  - `blend_interp=0.02`：`PSNR 33.79283 / SSIM 0.99790 / Edge 0.97650 / LPIPS 0.04581 / proxy 41.64162`
+- 判断：
+  - raw 小幅刷新当前 clean checkpoint best 到 `41.63526`
+  - 但 blend 后仍低于 `41.66` 归档线
+  - 不生成 test PNG/zip，不写 submission log，不消耗提交次数
+
+## 2026-05-10 榜单应急：生成两个合法低风险提交候选
+- 背景：
+  - 用户反馈线上第一名已到 `65.6323`
+  - 当前已确认线上合法 best 仍是 `65.4881`
+  - GCP 资源只剩约 2 天，因此从“无强信号不打包”临时切到“少量合法提交换线上反馈”
+- 新增提交生成脚本：
+  - `src/make_hat_submission.py`
+  - 用途：HAT/HAT native-io 纯模型推理生成第一阶段 x2 提交包
+  - 提交包格式硬约束：zip 内必须是单一顶层 team 目录，目录下放 `README.md` 与 `preliminary/*.png`
+  - README 明确：不复制、不替换、不检索、不把训练 HR 作为推理输入；只做合法 LR-only 后处理
+  - `python3 -m py_compile src/make_hat_submission.py` 通过
+- 候选 1：当前 clean best + `blend_interp=0.02`
+  - 权重：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/best_x2.pth`
+  - clean `full120` 复核：`PSNR 33.79283 / SSIM 0.99790 / Edge 0.97650 / LPIPS 0.04581 / proxy 41.64162`
+  - metrics CSV：`experiments/router_metrics_20260510/nativeio_lr8e8_blend002_rerun.csv`
+  - 可提交包：`submission/fqy_hat_l_nativeio_lr8e8_blend002.zip`
+  - zip 校验：`101` entries，`100` PNG，含 `README.md`；zip 内带顶层目录 `fqy_hat_l_nativeio_lr8e8_blend002/`；样例 PNG 为 `640 x 512` 8-bit grayscale
+- 候选 2：全 1800 官方训练样本 train-all finalizer + `blend_interp=0.02`
+  - 训练日志：`logs/train_x2_hat_l_nativeio_official_trainall1800_lr8e8_p96_avg.log`
+  - 起点：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/best_x2.pth`
+  - 配置：`official-only`、`native-io`、`train-all`、`patch=96`、`epochs=1`、`lr=8e-8`、`min_lr=3e-8`
+  - 训练：`train_loss 0.01190`
+  - final raw：`PSNR 33.78553 / SSIM 0.99790 / Edge 0.97649 / LPIPS 0.04499 / proxy 41.63591`
+  - 注意：该 raw/full120 验证已被 train-all 污染，不能作为 clean 证据
+  - `blend_interp=0.02`：`PSNR 33.79344 / SSIM 0.99790 / Edge 0.97650 / LPIPS 0.04580 / proxy 41.64226`
+  - metrics CSV：`experiments/router_metrics_20260510/nativeio_trainall1800_lr8e8_blend002.csv`
+  - 可提交包：`submission/fqy_hat_l_nativeio_trainall1800_lr8e8_blend002.zip`
+  - zip 校验：`101` entries，`100` PNG，含 `README.md`；zip 内带顶层目录 `fqy_hat_l_nativeio_trainall1800_lr8e8_blend002/`；样例 PNG 为 `640 x 512` 8-bit grayscale
+- 提交建议：
+  - 第一顺位：`submission/fqy_hat_l_nativeio_lr8e8_blend002.zip`，因为它对应当前 clean best 的合法小涨
+  - 第二顺位：`submission/fqy_hat_l_nativeio_trainall1800_lr8e8_blend002.zip`，作为全训练终局线上反馈包；本地 full120 只做污染参考
+  - 两者都不是 `70+` 强信号，预期更像 `65.5x~65.6x` 的小幅摸高；若线上无明显涨幅，应立即转向新强公开 x2 主干/权重快速筛，而不是继续慢爬
+
+## 2026-05-10 线上反馈：`trainall1800 + blend002` 小幅刷新，HAT 慢爬冻结
+- 已提交：`submission/fqy_hat_l_nativeio_trainall1800_lr8e8_blend002.zip`
+- 平台分：`65.5414`
+- 对比：
+  - 旧合法线上 best：`65.4881`
+  - 本次增量：`+0.0533`
+  - 当前已知第一名：`65.6323`
+- 判断：
+  - train-all 泛化有小幅正收益，但没有接近 `70+` 的斜率
+  - 当天剩余提交位优先用于 clean-vs-trainall A/B：`submission/fqy_hat_l_nativeio_lr8e8_blend002.zip`
+  - 若 clean 包 `<65.56`，停止提交 HAT polishing/router/continuation
+  - 剩余 GPU 改投公开强 x2 权重/主干 `Stage A -> B -> C` 逐级筛选
+
+## 2026-05-10 最后 48 小时公开强权重 Stage A 复核
+- 评估接口补齐：
+  - `src/evaluate_dat_gray.py`、`src/evaluate_drct_gray.py` 支持 `--names-file` 与 `--metrics-csv`
+  - `src/evaluate_srformer_gray.py`、`src/evaluate_spandrel_gray.py` 也补齐同样接口，后续 Stage A/B/C 可固定切片并保留逐图 metrics
+  - `python3 -m py_compile src/evaluate_srformer_gray.py src/evaluate_spandrel_gray.py src/evaluate_dat_gray.py src/evaluate_drct_gray.py` 通过
+- DAT_X2 eval-only：
+  - 仓库/权重：`external_models/DAT`、`external_models/DAT_weights/DAT_x2.safetensors`
+  - 命令切片：`--names-file manifests/val_smoke4_seed42.txt`
+  - 日志：`logs/eval_dat_x2_hf_smoke4_20260510.log`
+  - metrics CSV：`experiments/router_metrics_20260510/dat_x2_hf_smoke4.csv`
+  - 结果：`PSNR 36.63121 / SSIM 0.99848 / Edge 0.98503 / LPIPS 0.03444 / proxy 44.52328`
+  - Stage A 门槛：`proxy >= 45.20`；同切片 HAT 参考约 `45.39403`
+  - 结论：DAT_X2 低于门槛，不进 `probe40`，不做微调，不打包
+- DRCT x2 复核：
+  - 已拉取官方仓库 `external_models/DRCT`
+  - 官方 README/配置有 SRx2 项，但可访问 model zoo 与 HF 镜像只拿到 x4/Real-x4 权重
+  - 中断下载留下的 x4/Real-x4 临时权重已清理，避免误用
+  - 结论：暂无可复现公开 x2 权重，不进 eval-only
+- FGA-SR 复核：
+  - 官方项目页/README/`choidj/FGA-SR` 权重仓显示当前公开 model zoo 为 `x4`
+  - 未发现可用公开 x2 checkpoint
+  - 结论：不作为本赛 x2 候选推进
+- SRFormer/SRFormerV2：
+  - 复用 2026-05-09 已完成 smoke 结论：`SRFormerv2 proxy 44.58988`，低于同切片 HAT `45.39403`
+  - 不回开已关闭权重分支
+- 当前执行结论：
+  - HAT 普通 continuation 冻结
+  - clean-vs-trainall A/B 已返回 `65.5408`，低于 `65.56`
+  - 不再提交 HAT-family polishing；最后提交位只留给 `full120 >= 41.66` 或 `probe40 >= 43.12` 的新候选
+
+## 2026-05-10 clean-vs-trainall A/B 线上反馈：clean 略低，HAT 提交冻结
+- 已提交：`submission/fqy_hat_l_nativeio_lr8e8_blend002.zip`
+- 平台分：`65.5408`
+- 对比：
+  - train-all 包 `submission/fqy_hat_l_nativeio_trainall1800_lr8e8_blend002.zip`：`65.5414`
+  - clean 包比 train-all 低 `0.0006`
+  - 两者都低于 `65.56` 继续 HAT-family 提交门槛
+- 判断：
+  - clean 与 train-all 线上几乎持平，但 train-all 略优
+  - 当前合法线上 best 保持 `65.5414`
+  - 普通 HAT continuation、blend/router、HAT-family ensemble 不再消耗提交位
+  - 剩余提交位只留给 clean `full120 >= 41.66` 或 `probe40 >= 43.12` 的新公开 x2 主干/权重候选
+
+## 2026-05-10 ONNX/OpenModelDB Stage A 复核：无候选过门槛
+- 新增 ONNX eval-only 通道：
+  - 脚本：`src/evaluate_onnx_sr_gray.py`
+  - 支持：`--names-file`、`--metrics-csv`、NCHW/NHWC auto、1/3 channel auto、输出尺寸校验、CPU/GPU provider auto
+  - `python3 -m py_compile src/evaluate_onnx_sr_gray.py` 通过
+  - 本机只可用 `CPUExecutionProvider`，HAT-SRx2 ONNX 单张约 `58s`
+- ONNX 候选：
+  - `Tyzer34/HAT-SRx2/hat_srx2.onnx`
+    - shape smoke：`logs/eval_onnx_hat_srx2_shape1_20260510.log`
+    - Stage A：`logs/eval_onnx_hat_srx2_smoke4_20260510.log`
+    - metrics CSV：`experiments/router_metrics_20260510/onnx_hat_srx2_smoke4.csv`
+    - 结果：`PSNR 36.86704 / SSIM 0.99861 / Edge 0.98573 / LPIPS 0.03068 / proxy 44.76882`
+    - 结论：低于 Stage A 门槛 `45.20`，关闭，不进 `probe40`
+  - Qualcomm QuickSRNet Small/Medium/Large ONNX float 包：
+    - 已下载并检查 metadata
+    - 三个包均为 `input 128x128 -> output 512x512`，即 x4，不是本赛 x2
+    - 结论：排除，不做 x2 smoke
+- OpenModelDB/Spandrel 候选：
+  - `2x-ParimgCompact`：`proxy 36.12010`，关闭
+  - `2xLiveActionV1_SPAN`：`proxy 40.13261`，关闭
+  - `2x-StarSample-V2-HQ`：`proxy 40.36013`，关闭
+- 当前结论：
+  - 本轮 ONNX/OpenModelDB 新候选全部低于 `45.20`
+  - 不生成 test PNG/zip，不提交
+  - 继续只找新的、明确 x2、非 GAN/非 real-world、未测试过且可加载的公开权重
+
+## 2026-05-10 Stage A 扩展筛选 + LR-only TTT sanity：仍无 `70+` 信号
+- OpenModelDB classical / lightweight / restoration 扩展批：
+  - SwinIR classical DF2K：`proxy 44.48555`
+  - SwinIR classical DIV2K：`44.10949`
+  - SwinIR lightweight DIV2K：`43.96717`
+  - SRFormerLight DIV2K：`43.95802`
+  - Compact/Ultra/SuperUltra pretrain：`40.85981 / 40.46720 / 38.21594`
+  - SPAN x2 ch48：`43.75943`
+  - RealESRGAN_x2plus：`36.94307`
+  - BSRGANx2：`38.46127`
+  - MoSR/RealPLKSR/DITN/RealESRGANv2 animevideo：均远低于门槛
+- Hugging Face / ONNX 扩展批：
+  - Xenova Swin2SR classical x2 ONNX：`44.41876`
+  - Xenova Swin2SR lightweight x2 ONNX：`44.13388`
+  - ThalisAI Swin2SR custom x2：`42.96835`
+  - ThalisAI Swin2SR DIV2K x2：`43.16362`
+  - AMD RCAN int8 NHWC tile：`39.31848`
+  - AMD SESR fp32 `0-255` tile：`42.37068`
+- 代码更新：
+  - `src/evaluate_onnx_sr_gray.py` 增加固定输入 ONNX 的 auto tiling / padding 支持，可跑 `56x56`、`256x256`、`512x512` 这类 tile 模型
+  - `src/evaluate_hat_ttt_gray.py` 增加 `--native-io`、`--names-file`、`--metrics-csv`、`--blend-interp`，并移除重复 HAT 注册
+  - `python3 -m py_compile src/evaluate_onnx_sr_gray.py src/evaluate_hat_ttt_gray.py` 通过
+- LR-only sanity：
+  - 当前 HAT smoke4 raw：`45.38694`
+  - `blend_interp=0.02 + interp=cubic`：`45.39291`，仅 `+0.00597`
+  - TTT tail/last 小步自监督最好：`45.39207`，没有超过普通 blend
+- 结论：
+  - 以上新增候选均低于 Stage A `45.20`，没有进入 `probe40`
+  - HAT LR-only / TTT 只属于 polishing，不生成 test PNG/zip，不写 submission log
+
+## 2026-05-10 合法冲 `65.6323/66`：clean HAT 8-TTA 包生成
+- 背景：
+  - 目标从不现实的 `70` 调整为合法冲 `66`，最低争取超过 `65.6323`
+  - 重新评估 HAT 合法推理侧增强，重点是 8-TTA self-ensemble + LR-only blend
+- smoke4 结果：
+  - train-all raw：`45.38967`
+  - train-all `blend002 + cubic`：`45.39573`
+  - train-all `TTA`：`45.49259`
+  - train-all `TTA + blend002 + cubic`：`45.49316`
+  - clean `TTA + blend002 + cubic`：`45.49347`
+  - 结论：TTA 在 smoke4 上带来约 `+0.10`，明显高于普通 blend 的 `+0.006`
+- clean full120：
+  - 权重：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/best_x2.pth`
+  - 配置：`native-io`、8-TTA、`blend_interp=0.02`、`interp=cubic`
+  - 日志：`logs/eval_hat_clean_tta_blend002_cubic_full120_20260510.log`
+  - metrics CSV：`experiments/router_metrics_20260510/hat_clean_tta_blend002_cubic_full120.csv`
+  - 结果：`PSNR 33.87159 / SSIM 0.99795 / Edge 0.97687 / LPIPS 0.04628 / proxy 41.72045`
+  - 相对当前 clean blend002 `41.64162`：`+0.07883`
+  - 已超过 `41.66` 打包线
+- 提交包：
+  - `submission/fqy_hat_l_nativeio_clean_tta_blend002_cubic.zip`
+  - 生成日志：`logs/make_hat_l_nativeio_clean_tta_blend002_cubic_20260510.log`
+  - zip 校验：`101` entries，`100` PNG，含 `README.md`
+  - zip 内只有单一顶层目录 `fqy_hat_l_nativeio_clean_tta_blend002_cubic/`
+  - 全部 PNG 已校验为 `640x512`、8-bit grayscale (`L`)
+- 判断：
+  - 这是当前合法冲 `65.6323/66` 的第一提交候选
+  - 后续线上反馈已返回 `65.6804`，见下一节
+
+## 2026-05-10 线上反馈：clean 8-TTA 包刷新到 `65.6804`
+- 已提交：
+  - `submission/fqy_hat_l_nativeio_clean_tta_blend002_cubic.zip`
+- 平台分：`65.6804`
+- 对比：
+  - 上一合法线上 best：`65.5414`
+  - 本次增量：`+0.1390`
+  - 已知第一名：`65.6323`
+  - 当前领先已知第一名：`+0.0481`
+- 状态：
+  - 今天最后一次提交已用完
+  - `experiments/submission_log.csv` 已补平台分
+  - `experiments/probe_summary_20260510.csv` 中 clean 8-TTA full120 记录改为 `submitted`
+- 下一步：
+  - 不再生成今天的新包
+  - 离线继续围绕 `8-TTA`、LR cluster router、clean/train-all TTA 对比或新公开 x2 权重找 `66` 级证据
+
+## 2026-05-10 离线续推：TTA 后处理与 HAT image-space ensemble
+- 新增工具：
+  - `src/evaluate_hat_postprocess_sweep.py`
+  - 作用：每张图只做一次 HAT/TTA 前向，在同一预测上 sweep 多组合法 LR-only `interp/blend/sharpen`；也支持双 HAT image-space `alpha` ensemble。
+  - `src/make_hat_submission.py` 同步补了可选 `--weights-b/--alpha-a/--tta-b/--native-io-b`，若后续过线可直接生成合法 ensemble 包。
+- clean 8-TTA 后处理 full120 sweep：
+  - 日志：`logs/eval_hat_clean_lr8e8_tta_post_sweep_full120_20260510.log`
+  - summary：`experiments/hat_post_sweep_20260510/clean_lr8e8_tta_full120_summary.csv`
+  - 最优：`cubic blend_interp=0.015`
+  - 结果：`PSNR 33.87131 / SSIM 0.99795 / Edge 0.97687 / LPIPS 0.04606 / proxy 41.72060`
+  - 相对已提交 `blend002 cubic` 的 `41.72045` 只有 `+0.00015`，归档为 polishing，不生成新包。
+- clean/train-all TTA ensemble smoke4：
+  - summary：`experiments/hat_post_sweep_20260510/clean_trainall_tta_ensemble_smoke4_summary.csv`
+  - 最优仅 `45.49501`，相对单 clean TTA smoke 增量约 `+0.0006`，不进 full120。
+- 当前 native-io clean 与上一版 native-io clean TTA ensemble smoke4：
+  - summary：`experiments/hat_post_sweep_20260510/clean_lr8e8_prev1680_tta_ensemble_smoke4_summary.csv`
+  - 最优 `45.49520`，仍是万分级信号，不进 full120。
+- 当前 native-io clean 与上一版非 native-io clean HAT TTA ensemble：
+  - smoke4 summary：`experiments/hat_post_sweep_20260510/clean_lr8e8_prev_non_native_tta_ensemble_smoke4_summary.csv`
+  - smoke4 最优：`alpha_a=0.25`、`cubic blend=0.01`，proxy `45.51113`，相对当前单 clean TTA smoke 有明显小信号。
+  - full120 日志：`logs/eval_hat_clean_lr8e8_prev_non_native_tta_ensemble_full120_20260510.log`
+  - full120 summary：`experiments/hat_post_sweep_20260510/clean_lr8e8_prev_non_native_tta_ensemble_full120_summary.csv`
+  - full120 最优：`alpha_a=0.65` 当前 native-io + `0.35` 旧非 native-io，`interp=cubic`、`blend_interp=0.015`
+  - 结果：`PSNR 33.87415 / SSIM 0.99796 / Edge 0.97686 / LPIPS 0.04609 / proxy 41.72349`
+  - 相对已提交 clean 8-TTA `41.72045` 为 `+0.00304`；刷新本地 clean TTA/ensemble best，但按线上拟合仍远低于 `66` 所需量级。
+- router 复核：
+  - `experiments/router_analysis_k3_20260510_tta_non_native_ensemble`
+  - `experiments/router_analysis_k4_20260510_tta_non_native_ensemble`
+  - k3/k4 selected gain 均为 `0.00000`；oracle `41.72710` 只是 per-image 上限，不做 test route 包。
+- 决策：
+  - 不生成今天的新 test PNG/zip；今天提交位已用完。
+  - `41.72349` 可作为明天低优先级边际候选，但不是冲 `66` 强信号。
+  - 后续继续找结构性增益；普通 HAT-family 小修仍不值得消耗提交位。
+
+## 2026-05-11 合法冲 `66/67`：HAT 多样性与公开模型 ensemble smoke
+- 当前线上 best：
+  - `submission/fqy_hat_l_nativeio_clean_tta_blend002_cubic.zip`
+  - 平台分 `65.6804`
+  - 目标继续调整为先稳冲 `66`，若出现结构性强信号再看 `67`
+- HAT checkpoint 多样性 smoke4：
+  - 工具：`src/evaluate_hat_postprocess_sweep.py`
+  - 统一配置：当前 native-io clean best + 候选 HAT，8-TTA，`cubic blend={0.01,0.015,0.02}`，`alpha={0,0.25,0.5,0.65,0.75,1}`
+  - `current_vs_p96_clean1024`：最优 `45.50985`
+  - `current_vs_p96_trainall1800`：最优 `45.50954`
+  - `current_vs_p48_cont`：最优 `45.50942`
+  - `current_vs_p96_probe512_clean`：最优 `45.50940`
+  - `current_vs_p48_full_lr1e5`：最优 `45.50042`
+  - `current_vs_native_probe40`：最优 `45.49523`
+  - 对比昨晚当前 native-io clean + 上一版非 native-io clean HAT 的 smoke4 `45.51113`，全部更低；不进 full120，不打包。
+- 新增公开模型外部 ensemble 评估工具：
+  - 文件：`src/evaluate_hat_external_ensemble.py`
+  - 作用：HAT 8-TTA 与一个外部 ONNX/Spandrel x2 模型做 image-space `alpha` ensemble，再 sweep 合法 LR-only 后处理。
+  - `python3 -m py_compile src/evaluate_hat_external_ensemble.py` 通过。
+- 外部 ensemble smoke4：
+  - HAT 8-TTA + SwinIR DF2K Spandrel：最优 `alpha_hat=0.975`、`cubic blend=0.01`，proxy `45.49537`
+  - HAT 8-TTA + HAT-SRx2 ONNX：最优为纯 HAT `alpha_hat=1.0`，proxy `45.49442`
+  - 两者都明显低于 HAT-HAT 最优 smoke4 `45.51113`，关闭。
+- 决策：
+  - 不生成新 test PNG/zip。
+  - 当前离线 best 仍是 HAT-HAT 8-TTA `full120 = 41.72349`，但只比已提交包 `41.72045` 高 `+0.00304`，不是冲 `66` 的提交信号。
+  - 下一步只继续找未测过、明确 x2、非 GAN/非 real-world、可复现加载的公开权重/主干；优先排查 RGT/GRL 等可能的强 classical x2 路线。
+
+## 2026-05-11 公开 x2 补扫：RGT / super-image 均未过 Stage A
+- RGT 官方/HF 权重复核：
+  - 来源：`ViperYX/RGT` Hugging Face 镜像，文件页标注 `apache-2.0`，与官方 RGT 仓库 x2 model zoo 线索一致。
+  - 本地权重：`external_models/RGT_weights/RGT_x2.pth`、`external_models/RGT_weights/RGT_S_x2.pth`
+  - `src/evaluate_rgt_gray.py` 已补 `--names-file` 与 `--metrics-csv`。
+  - RGT x2 smoke4：`logs/eval_rgt_x2_hf_smoke4_20260511.log`，proxy `44.51695`
+  - RGT-S x2 smoke4：`logs/eval_rgt_s_x2_hf_smoke4_20260511.log`，proxy `44.54903`
+  - 结论：均低于 Stage A `45.20`，不进 probe40。
+- HAT + RGT 合法外部 ensemble smoke：
+  - HAT 8-TTA + RGT-S Spandrel：`45.49792`
+  - HAT 8-TTA + RGT Spandrel：`45.49714`
+  - 两者只略高于纯 HAT 同切片 `45.49442`，但仍明显低于 HAT-HAT smoke4 best `45.51113`；不进 full120。
+- `super-image` 公开 x2 权重：
+  - 新增 `src/evaluate_super_image_gray.py`，用于评估 Hugging Face `super-image` 系列公开 x2 模型；支持 `--names-file`、`--metrics-csv`、TTA 和合法 LR-only blend。
+  - 安装 `super-image` 后，`opencv-python` 触发 `libGL.so.1` 缺失，已改为 `opencv-python-headless`，并确认 `cv2 4.13.0` 可导入。
+  - EDSR-base `43.45316`；EDSR `43.75011`；MSRN `43.58398`；MSRN-BAM `43.50212`
+  - DRLN `43.78541`；DRLN-BAM `43.72333`；CARN `43.35390`；AWSRN-BAM `43.49939`；PAN `43.41240`
+  - HAN/RCAN-BAM 当前仓库缺可直接下载的 `pytorch_model_2x.pt`，不作为可复现 x2 候选。
+  - 结论：本批 best 为 DRLN `43.78541`，远低于 Stage A `45.20`，全部关闭。
+- 输入侧合法 preprocessing sanity：
+  - HAT-HAT 8-TTA + `input_gamma=0.98` smoke4 直接掉到 `42.78587`。
+  - 这是明显域偏移，不继续跑 gamma/contrast/blur/sharpen 输入 sweep。
+- 总结：
+  - 本轮未出现 `66/67` 强信号。
+  - 不生成新 test PNG/zip；当前线上 best 仍为 `65.6804`。
+
+## 2026-05-11 继续冲 `66/67`：phase-pad / OpenModelDB extra / CRAFT / CAT 补漏
+- HAT phase-pad self-ensemble sanity：
+  - 工具：`src/evaluate_hat_postprocess_sweep.py`，新增 `--phase-pad` / `--phase-pad-b`
+  - 配置：当前 clean native-io HAT-L，phase pad `{0,0;4,0;0,4;4,4;8,8}`，同一输出上 sweep raw / cubic blend
+  - 日志：`logs/eval_hat_clean_lr8e8_phase5_smoke4_20260511.log`
+  - summary：`experiments/hat_post_sweep_20260511/clean_lr8e8_phase5_smoke4_summary.csv`
+  - 最优：`cubic blend_interp=0.02`，smoke4 proxy `45.37382`
+  - 结论：低于当前单 HAT 8-TTA smoke `45.49347` 与 HAT-HAT smoke best `45.51113`，关闭。
+- OpenModelDB extra direct-download Stage A：
+  - `2x_lexica_swinir`：`42.39638`
+  - `2x_esrgan_pretrain`：`39.42583`
+  - `2x_lexica_rrdb`：`41.87707`
+  - `2x_lexica_rrdb_sharp`：`38.58298`
+  - metrics：`experiments/router_metrics_20260511/openmodeldb_2x_*_smoke4.csv`
+  - 结论：全部低于 Stage A `45.20`，不进 probe40。
+- CRAFT-SR 官方 x2：
+  - 权重：`external_models/CRAFT-SR/experiments/pretrained_models/pretrained_models/CRAFT_MODEL_X2.pth`
+  - 日志：`logs/eval_craft_x2_official_smoke4_20260511.log`
+  - metrics：`experiments/router_metrics_20260511/craft_x2_official_smoke4.csv`
+  - smoke4 proxy `43.88952`，低于 Stage A，关闭。
+- CAT-A-2 官方 x2：
+  - 权重：`external_models/CAT_weights/CAT_A_2/SR_CAT_A_2_x2.pth`
+  - 新增 evaluator：`src/evaluate_cat_gray.py`
+  - 日志：`logs/eval_cat_a2_x2_official_smoke4_20260511.log`
+  - metrics：`experiments/router_metrics_20260511/cat_a2_x2_official_smoke4.csv`
+  - smoke4 proxy `44.57672`，低于 Stage A，关闭。
+- CAT evaluator padding 修正与全族复核：
+  - `src/evaluate_cat_gray.py` 已按官方 `CATModel.test()` 改成“仅不整除时补边”，并为 regular/axial 版本设置正确窗口 divisor。
+  - CAT-A-2 padfix：`44.57237`
+  - CAT-A：`44.57894`
+  - CAT-R：`44.50241`
+  - CAT-R-2：`44.50670`
+  - 全部仍低于 Stage A `45.20`。
+- HAT 8-TTA + CAT image-space ensemble smoke：
+  - 新增：`src/evaluate_hat_external_ensemble.py` 支持 `--external-kind cat`
+  - HAT + CAT-A：best `45.50183`
+  - HAT + CAT-A-2：best `45.49995`
+  - 对比当前 HAT-HAT smoke best `45.51113` 仍更低，不进 full120。
+- 决策：
+  - 本批没有候选达到 `proxy >= 45.20`，因此不进 probe40/full120，不生成提交包。
+  - 当前可提交级别的离线 best 仍是 HAT-HAT 8-TTA full120 `41.72349`，只比已上线 `65.6804` 包的本地 `41.72045` 高 `+0.00304`，不足以冲 `66`。
+
+## 2026-05-11 继续冲 `66/67`：OmniSR / GRL / TorchSR / SwinFIR / MAN 补扫
+- OmniSR 官方/OpenModelDB x2：
+  - DF2K：`43.72507`
+  - DIV2K：`43.60434`
+  - 均低于 Stage A `45.20`，关闭。
+- GRL 官方 x2：
+  - tiny `43.57378`
+  - small `43.88553`
+  - base `44.28306`
+  - 均低于 Stage A，关闭。
+- TorchSR 公开 x2：
+  - NinaSR-B2 `43.81458`
+  - RCAN `43.87868`
+  - EDSR `43.87123`
+  - 均低于 Stage A，关闭。
+- SwinFIR/HATFIR 官方 x2：
+  - 新增 `src/evaluate_swinfir_gray.py`，只加载 arch/utils，绕开官方 data pipeline；默认 FP32 eval，避免 FFT bf16 报错。
+  - SwinFIR-T `44.17709`
+  - SwinFIR `44.72439`
+  - HATFIR `44.94415`
+  - HAT 8-TTA + HATFIR external ensemble best `45.49817`，仍低于 HAT-HAT smoke best `45.51113`。
+  - 结论：不进 probe40/full120。
+- MAN 官方 x2：
+  - 官方仓库：`external_models/MAN`
+  - 官方权重：`external_models/MAN_weights/`
+  - `src/evaluate_man_gray.py` 已补 `--names-file` 与 `--metrics-csv`。
+  - MAN-tiny `43.64204`
+  - MAN-light `44.03555`
+  - MAN-base `44.28076`
+  - 均低于 Stage A，关闭。
+- 后处理/router 空间复核：
+  - clean HAT 8-TTA full120 后处理 oracle：`41.72830`，相对最佳固定 route `+0.00770`
+  - HAT-HAT 8-TTA full120 后处理/alpha oracle：`41.73022`，相对最佳固定 route `+0.00673`
+  - oracle 上限本身太低，不足以支撑复杂 LR router 冲 `66`。
+- 决策：
+  - 本轮没有新候选达到 `proxy >= 45.20`，不生成 test PNG/zip。
+  - 当前线上 best 仍为 `65.6804`；离线 best 仍为 HAT-HAT 8-TTA full120 `41.72349`，不足以消耗提交位。
+
+## 2026-05-11 official-only metric-loss continuation 小探针
+- 目的：
+  - 检查纯 pixel 慢爬之外，`SSIM/Edge/LPIPS` metric-aligned loss 是否能给出比普通 HAT continuation 更大的合法增益。
+- 配置：
+  - 起点：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/best_x2.pth`
+  - official-only clean split：`manifests/val_full120_seed42.txt`
+  - `train-limit=512`，`epochs=1`，`lr=5e-8 -> 1e-8`
+  - loss：`pixel=1.0`、`ssim=0.05`、`edge=0.02`、`lpips=0.01`
+  - 日志：`logs/train_x2_hat_l_nativeio_metricloss_limit512_lr5e8_full120clean_avg.log`
+  - out-dir：`checkpoints_hat_l_nativeio_metricloss_limit512_lr5e8_full120clean_avg`
+- 结果：
+  - initial raw full120：`41.63526`
+  - final raw full120：`41.63219`
+  - delta：`-0.00307`
+  - 训练 loss：`0.01901`
+- 决策：
+  - 该 loss 配比降低 clean full120，不进 TTA/full120 post-sweep/打包。
+  - `best_x2.pth` 只是初始 checkpoint 的保存副本；不要误当新 best。
+- 温和 `SSIM/Edge` probe40 复核：
+  - 起点同上，`train-limit=512`、`epochs=1`、`lr=5e-8 -> 1e-8`
+  - loss：`pixel=1.0`、`ssim=0.02`、`edge=0.01`、`lpips=0.0`
+  - log：`logs/train_x2_hat_l_nativeio_ssimedge_probe40_limit512_lr5e8_avg.log`
+  - out-dir：`checkpoints_hat_l_nativeio_ssimedge_probe40_limit512_lr5e8_avg`
+  - initial probe40：`43.09584`
+  - final probe40：`43.09211`
+  - delta：`-0.00373`
+  - 决策：相对自身为负，不进 full120，不作为提交候选。
+
+## 2026-05-11 评分归一化公式记录
+- 已新增文档：`SCORING_NORMALIZATION.md`
+- 公式：
+  - 越大越好指标（PSNR、SSIM、边缘保持）：`s = (x - x_min) / (x_max - x_min)`
+  - 越小越好指标（LPIPS、参数量、模型体积）：`s = (x_max - x) / (x_max - x_min)`
+  - 越界后裁剪：`s = min(1, max(0, s))`
+  - 单项得分：`score_i = s_i * w_i`，总分为各项得分之和。
+- 对当前 x2 第一阶段的影响：
+  - `rcwn.md` 明确第一阶段只计图像质量：PSNR `30`、SSIM `30`、LPIPS `20`、边缘保持 `20`。
+  - 参数量、模型体积、推理时间不参与第一阶段评分；它们只影响后续阶段或约束，不应为了小模型牺牲当前 x2 画质分。
+  - 目前仍缺各项 `x_min/x_max`，所以本地 `proxy = PSNR + 6*SSIM + 2*Edge - 2*LPIPS` 只能当相关性代理，不能当平台真实公式。
+  - 若后续拿到 `x_min/x_max`，应把本地候选重新按平台口径排序；小幅 LPIPS/SSIM 变化可能因为归一化区间较窄而比现在 proxy 估计更重要。
+- 结论：
+  - 该公式有助于校准候选排序，但在没有 `x_min/x_max` 前不能直接推出新的 `66/67` 提交包。
+  - 当前 best 仍是已线上 `65.6804` 的 clean HAT 8-TTA 包，不因该公式改变提交策略。
+
+## 2026-05-11 HAT TTA 子集/clean-trainall 小复核
+- 目的：
+  - 在不生成 test 包、不消耗提交次数的前提下，检查当前 HAT 8-TTA 是否有可合法微调的 TTA 子集余量。
+- 新增工具：
+  - `src/evaluate_hat_tta_subset_sweep.py`
+  - 每张图只前向缓存 TTA mode `0..7` 一次，再复用输出评估多个子集和 LR-only route。
+- clean vs trainall TTA ensemble smoke4：
+  - summary：`experiments/hat_post_sweep_20260511/clean_vs_trainall_tta_ensemble_smoke4_summary.csv`
+  - best：`alpha=0.5 + cubic blend=0.01 = 45.49501185`
+  - 相对 clean full8 smoke best `45.49442396` 仅 `+0.00059`
+  - 低于 HAT-HAT smoke best `45.51113`，关闭。
+- TTA 子集 smoke4：
+  - curated 子集：full8 仍优于 raw/flips/rotations。
+  - 进一步全 `255` 子集无 LPIPS 粗筛后，发现 `s247=0,1,2,4,5,6,7`（仅排除 mode `3`）略优。
+  - 带 LPIPS 复核 best：`s247 + cubic blend=0.01 = 45.49681714`
+  - 相对 full8 `cubic blend=0.01` 的 `45.49442396` 为 `+0.00239`
+  - clean `full120` 复核：
+    - log：`logs/eval_hat_clean_tta_s247_full120_20260511.log`
+    - summary：`experiments/hat_post_sweep_20260511/clean_lr8e8_tta_s247_full120_summary.csv`
+    - full8 best：`cubic blend=0.015 = 41.72060484`
+    - s247 best：`cubic blend=0.015 = 41.72005999`
+    - full120 delta：`-0.00054`
+- 当前判断：
+  - `s247` 的 smoke4 小涨没有泛化到 full120，关闭。
+  - 不生成 test PNG/zip，不作为明日提交候选。
+- 后续新工具：
+  - `src/make_hat_submission.py` 已补 `--tta-modes/--tta-modes-b`，若后续有 TTA 子集过线可直接生成同配置包。
+  - `src/evaluate_hat_external_residual.py` 已新增，用于 HAT + 外部公开模型的合法高频残差补偿 smoke。
+- HAT + 外部模型 highpass residual smoke4：
+  - HATFIR highpass best：`45.49527010`
+  - CAT-A highpass best：`45.49750889`
+  - HAT-HAT highpass best：`45.50096802`
+  - 三者均低于对应普通 alpha blend（HATFIR `45.49817`、CAT-A `45.50183`、HAT-HAT `45.51113`）。
+  - `s247` vs full8 full120 逐图 oracle 只有 `41.72317`，oracle gain `+0.00256`，不足以做 LR router。
+  - 决策：highpass residual 和 TTA 子集 router 都不进 full120/打包。
+
+## 2026-05-11 冲 66 补扫：冷门公开权重 / HATFIR full120 / 平台分反推
+- 冷门公开权重：
+  - `2x-PSNR`：OpenModelDB 记录的 Google Drive 链接无法被 `gdown` 取到，未继续卡住流程。
+  - HF `jaideepsingh/upscale_models` 标准 HAT x2：
+    - 权重：`external_models/HF_weights/jaideepsingh_upscale_models/HAT/HAT_SRx2.pth`
+    - log：`logs/eval_hf_jaideepsingh_hat_srx2_smoke4_20260511.log`
+    - metrics：`experiments/router_metrics_20260511/hf_jaideepsingh_hat_srx2_smoke4.csv`
+    - smoke4 proxy `44.66887`，低于 Stage A，关闭。
+  - Swift-SRGAN x2：
+    - 权重：`external_models/OpenModelDB_weights/cold_20260511/swift_srgan_2x.pth`
+    - log：`logs/eval_openmodeldb_swift_srgan_2x_smoke4_20260511.log`
+    - metrics：`experiments/router_metrics_20260511/openmodeldb_swift_srgan_2x_smoke4.csv`
+    - smoke4 proxy `42.20725`，低于 Stage A `45.20`，关闭。
+  - realSR SwinIR GAN x2：
+    - 权重：`external_models/OpenModelDB_weights/cold_20260511/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x2_GAN.pth`
+    - log：`logs/eval_openmodeldb_realsr_swinir_gan_x2_smoke4_20260511.log`
+    - metrics：`experiments/router_metrics_20260511/openmodeldb_realsr_swinir_gan_x2_smoke4.csv`
+    - smoke4 proxy `38.83051`，低于 Stage A，关闭。
+- HATFIR official x2 full120：
+  - 权重：`external_models/SwinFIR/experiments/pretrained_models/HATFIR_SRx2.pth`
+  - log：`logs/eval_hatfir_x2_official_full120_20260511.log`
+  - metrics：`experiments/router_metrics_20260511/hatfir_x2_official_full120.csv`
+  - full120：`PSNR 33.52033 / SSIM 0.99794 / Edge 0.97495 / LPIPS 0.05375 / proxy 41.35036`
+  - 结论：单模型离 HAT TTA 差距过大，不是提交候选。
+- HAT TTA vs HATFIR 逐图分析：
+  - base：current HAT full8 `cubic blend=0.015 = 41.72060`
+  - HATFIR 仅赢 `9/120` 张。
+  - oracle：`41.72650`，gain `+0.00590`
+  - k3/k4 LR-cluster router selected gain：`0.00000`
+  - 输出：
+    - `experiments/router_analysis_k3_20260511_hatfir_vs_hat_full120/`
+    - `experiments/router_analysis_k4_20260511_hatfir_vs_hat_full120/`
+  - 决策：oracle 上限仍是 polishing，cluster router 不能选出稳定 HATFIR 区域，不打包。
+- 平台分反推：
+  - 9 个合法提交拟合：`platform ~= -11.442760 + 1.849448 * local_proxy`，RMSE `0.04649`
+  - 估计线上 `66` 需要 local proxy `41.87344`
+  - 估计线上 `67` 需要 local proxy `42.41414`
+  - 当前离线 best HAT-HAT `41.72349` 距离估计 `66` 仍差约 `+0.150`；当前 HAT 小修、TTA 子集、HATFIR oracle 都没有 66 级别斜率。
+
+## 2026-05-11 平台口径重排：HAT-HAT 低 blend 是边际候选，但仍不到 66
+- 背景：
+  - 用户提供的归一化公式确认平台分是 PSNR/SSIM/Edge/LPIPS 的分项归一化加权和。
+  - 因 `x_min/x_max` 未知，不能直接复刻官方分，但可以用已提交合法包的线上反馈做经验校准。
+- 新增工具：
+  - `src/rank_platform_candidates.py`
+  - 用法示例：
+    ```bash
+    python3 src/rank_platform_candidates.py --candidate experiments --require-text full120 --top-k 12
+    ```
+  - 编译检查通过：`python3 -m py_compile src/rank_platform_candidates.py`
+- 校准结果：
+  - proxy 单变量拟合：`platform = -11.442760 + 1.849448 * proxy`，RMSE `0.04649`
+  - 四指标 ridge 拟合：`lambda=0.1`，RMSE `0.01959`
+  - ridge 标准化系数：`intercept 64.357211 / PSNR +0.407610 / SSIM +0.426878 / Edge +0.373660 / LPIPS -0.229535`
+- full120 候选重排：
+  - `proxy` 第一仍是 HAT-HAT `alpha_a=0.65 + cubic blend=0.015`：
+    - `PSNR 33.87415 / SSIM 0.99796 / Edge 0.97686 / LPIPS 0.04609 / proxy 41.72349`
+  - 平台 ridge 口径第一变成 HAT-HAT `alpha_a=0.65 + cubic blend=0.005`：
+    - summary：`experiments/hat_post_sweep_20260510/clean_lr8e8_prev_non_native_tta_ensemble_full120_summary.csv`
+    - metrics：`experiments/router_metrics_20260510/clean_lr8e8_prev_non_native_tta_ensemble_full120/a0p65_cubic_b0005.csv`
+    - `PSNR 33.87182 / SSIM 0.99796 / Edge 0.97686 / LPIPS 0.04566 / proxy 41.72199`
+    - proxy-fit 估计 `65.7199`，ridge 估计 `65.7000`
+- 细网格尝试：
+  - 曾启动 HAT-HAT full120 细 sweep（`alpha 0.55/0.60/0.65/0.70`，`blend 0.0025/0.005/0.0075/0.010`）。
+  - 实测第一张接近 `50s/image`，完整约两小时；且现有结果已显示上限是千分级，因此中止，避免浪费 GPU。
+- 决策：
+  - 当前仍没有 `66` 级别强信号。
+  - 若明天有提交位且没有更强新候选，低风险边际包的优先级应从原 `alpha=0.65 blend=0.015` 改为 `alpha=0.65 blend=0.005`，但它只是可能小刷，不是冲 `66/67` 路线。
+  - 今天不生成新 test PNG/zip。
+
+## 2026-05-11 MambaIRv2 官方 x2 复核：刷新本地 best，但仍是边际
+- 背景：
+  - 旧日志显示 MambaIRv2 单支弱，但 HAT + MambaIRv2 image-space ensemble 在 40-val 上曾有小正信号。
+  - 本地缺失旧仓库/权重，因此重新拉取官方 `csguoh/MambaIR` release v1.0 权重：
+    - `external_models/MambaIR_weights/mambairv2_classicSR_Base_x2.pth`
+    - `external_models/MambaIR_weights/mambairv2_classicSR_Large_x2.pth`
+- 工具更新：
+  - `src/evaluate_mambairv2_gray.py` 新增 `--names-file` / `--metrics-csv`。
+  - `src/evaluate_hat_mambair_ensemble.py` 新增当前 `native-io` HAT 支持、`--names-file`、`--metrics-dir`、`--summary-csv`，并支持合法 LR-only route sweep。
+  - 编译检查通过：`python3 -m py_compile src/evaluate_mambairv2_gray.py src/evaluate_hat_mambair_ensemble.py`
+- 单模型 Stage A smoke4：
+  - MambaIRv2-Base：`44.54960`
+    - log：`logs/eval_mambairv2_base_x2_official_smoke4_20260511.log`
+    - metrics：`experiments/router_metrics_20260511/mambairv2_base_x2_official_smoke4.csv`
+  - MambaIRv2-Large：`44.55586`
+    - log：`logs/eval_mambairv2_large_x2_official_smoke4_20260511.log`
+    - metrics：`experiments/router_metrics_20260511/mambairv2_large_x2_official_smoke4.csv`
+  - 单支均低于 Stage A `45.20`，关闭。
+- HAT + MambaIRv2-Large image-space ensemble：
+  - 配置：当前 native-io HAT-L clean best，HAT 8-TTA；MambaIRv2-Large 非 TTA；纯模型 image-space alpha ensemble。
+  - smoke4：
+    - log：`logs/eval_hat_nativeio_tta_mambairv2_large_notta_smoke4_20260511.log`
+    - metrics dir：`experiments/router_metrics_20260511/hat_nativeio_tta_mambairv2_large_notta_smoke4/`
+    - best `alpha_hat=0.90`：`45.50311`
+    - 过 Stage A，但仍低于 HAT-HAT smoke best `45.51113`。
+  - probe40：
+    - log：`logs/eval_hat_nativeio_tta_mambairv2_large_notta_probe40_20260511.log`
+    - metrics dir：`experiments/router_metrics_20260511/hat_nativeio_tta_mambairv2_large_notta_probe40/`
+    - HAT-only `alpha=1.0`：`43.18805`
+    - best `alpha_hat=0.90`：`43.20532`，增量 `+0.01727`
+    - 过 Stage B `43.12`，进入 clean full120。
+  - clean full120：
+    - log：`logs/eval_hat_nativeio_tta_mambairv2_large_notta_full120_20260511.log`
+    - metrics dir：`experiments/router_metrics_20260511/hat_nativeio_tta_mambairv2_large_notta_full120/`
+    - HAT-only raw `alpha=1.0`：`41.71741`
+    - best `alpha_hat=0.90`：`PSNR 33.88123 / SSIM 0.99797 / Edge 0.97691 / LPIPS 0.04654 / proxy 41.72977`
+    - 刷新本地 clean best，超过 HAT-HAT `41.72349` 约 `+0.00628`，超过已提交包 `41.72045` 约 `+0.00932`。
+- LR-only route smoke：
+  - log：`logs/eval_hat_nativeio_tta_mambairv2_large_notta_post_smoke4_20260511.log`
+  - summary：`experiments/hat_post_sweep_20260511/hat_nativeio_tta_mambairv2_large_notta_post_smoke4_summary.csv`
+  - raw `alpha_hat=0.90` 仍最好：`45.50294`
+  - `cubic blend=0.005/0.01/0.015/0.02` 均下降；不再跑 full120 blend。
+- 平台口径：
+  - proxy-fit 对 `41.72977` 估计约 `65.7343`。
+  - ridge 平台口径更偏好 `alpha=0.95`（LPIPS 更低）而非 proxy best，但估计仍只有约 `65.6840`。
+- 决策：
+  - 这是当时最新离线 clean proxy best，也是后续可考虑的小刷候选之一。
+  - 但它仍比当时估算 `66` 所需 `41.87344` 低约 `0.144`；2026-05-12 新拟合下距离 `41.87795` 仍约 `0.148`，所以不是 `66/67` 强信号。
+  - 当时不生成 test PNG/zip；fixed low-Mamba 提交后，这条也不再是第一优先级。
+
+## 2026-05-11 三路 HAT/HAT/MambaIRv2 ensemble：刷新 proxy best，仍不足 66
+- MambaIRv2-Large official-only 微调：
+  - 命令配置：官方 MambaIRv2-Large x2 权重，official-only clean split，`train_limit=512`，`patch=48`，`lr=3e-6 -> 1e-6`，1 epoch。
+  - log：`logs/train_mambairv2_large_official_full120clean_limit512_lr3e6_avg_20260511.log`
+  - checkpoint：`checkpoints_mambairv2_large_official_full120clean_limit512_lr3e6_avg_20260511/best_x2.pth`
+  - 单模型 full120：`41.02053 -> 41.27405`，仍远低于 HAT，单支关闭。
+- HAT + 微调 Mamba 组合：
+  - smoke4 best：`45.51277`
+  - probe40 best：`43.20591`
+  - full120 best：`alpha_hat=0.85 raw = 41.72732`
+  - 结论：低于原版 Mamba 组合 `41.72977`，微调 Mamba ensemble 关闭。
+- 新增三路评估脚本：
+  - `src/evaluate_hat_hat_mambair_ensemble.py`
+  - 支持 current HAT / previous HAT / MambaIRv2 三路合法 image-space ensemble、HAT native-io、TTA、`names-file`、metrics CSV、summary CSV 与 LR-only route。
+  - 编译检查通过：`python3 -m py_compile src/evaluate_hat_hat_mambair_ensemble.py`
+- 三路候选：
+  - HAT-A：`checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/best_x2.pth`，native-io，8-TTA。
+  - HAT-B：`checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/best_x2.pth`，non-native，8-TTA。
+  - Mamba：`external_models/MambaIR_weights/mambairv2_classicSR_Large_x2.pth`，non-TTA。
+- 三路 smoke4：
+  - log：`logs/eval_hat_hat_mambairv2_large_notta_smoke4_20260511.log`
+  - metrics dir：`experiments/router_metrics_20260511/hat_hat_mambairv2_large_notta_smoke4/`
+  - best：`0.55/0.35/0.10 raw = 45.51503`
+- 三路 probe40：
+  - log：`logs/eval_hat_hat_mambairv2_large_notta_probe40_20260511.log`
+  - metrics dir：`experiments/router_metrics_20260511/hat_hat_mambairv2_large_notta_probe40/`
+  - best：`0.55/0.35/0.10 raw = 43.20913`
+  - 相对 HAT+Mamba probe `43.20532` 为 `+0.00381`。
+- 三路 clean full120：
+  - log：`logs/eval_hat_hat_mambairv2_large_notta_full120_20260511.log`
+  - summary：`experiments/hat_hat_mambairv2_full120_sweep_20260511.csv`
+  - metrics dir：`experiments/router_metrics_20260511/hat_hat_mambairv2_large_notta_full120/`
+  - best：`0.60/0.30/0.10 raw`
+  - metrics：`PSNR 33.88321 / SSIM 0.99798 / Edge 0.97690 / LPIPS 0.04657 / proxy 41.73174`
+  - 这是当前 proxy best；相对 HAT+Mamba `41.72977` 为 `+0.00197`，相对当时已提交 clean 8-TTA 包本地 `41.72045` 为 `+0.01129`；在 2026-05-12 fixed low-Mamba 提交后，只比已提交 fixed low-Mamba 本地 `41.72854` 高 `+0.00320`，且 LPIPS 更差。
+- 三路 LR-only postprocess smoke：
+  - log：`logs/eval_hat_hat_mambairv2_large_notta_post_smoke4_20260511.log`
+  - summary：`experiments/hat_hat_mambairv2_post_smoke4_sweep_20260511.csv`
+  - raw `45.51438` 最好；`cubic blend=0.005/0.010/0.015/0.020` 均下降。
+  - 决策：不跑三路 full120 blend。
+- HAT-B 变体补烟测：
+  - 用 `checkpoints_hat_l_nativeio_official_cont_limit1024_lr2e7_full120clean_avg/best_x2.pth` 替代上一版非 native HAT。
+  - log：`logs/eval_hat_hatnative1024_mambairv2_large_notta_smoke4_20260511.log`
+  - best smoke4：`45.50314`，明显低于三路当前 best `45.51503`，关闭。
+- 平台口径重排：
+  - `src/rank_platform_candidates.py --candidate experiments --require-text full120 --top-k 15`
+  - 当时 proxy-fit 对三路 `41.73174` 估计约 `65.7379`。
+  - 当时 ridge 口径仍把 HAT-HAT `alpha=0.65 + cubic blend=0.005` 排第一，估计 `65.7000`；三路 raw 因 LPIPS `0.04657` 排在其后，ridge 约 `65.697`。
+  - 2026-05-12 `65.6887` 反馈后重算：三路 proxy-fit 约 `65.7303`，ridge 约 `65.692`，不如已提交 fixed low-Mamba。
+- 决策：
+  - 三路 raw 是当前离线 proxy best，可列为下一提交窗口的高波动小刷候选。
+  - 但距离最新估算 `66` 所需 `41.87795` 仍差约 `0.146`，所以不是 `66/67` 强信号。
+  - 不生成 test PNG/zip。
+
+## 2026-05-11 平台口径继续冲：low-Mamba 固定路线暂列小刷第一
+- HAT-HAT / HAT+Mamba / 三路候选的 LR-cluster router：
+  - base：HAT-HAT `alpha=0.65 + cubic blend=0.005`，full120 `41.72199`，提交前旧 ridge `65.7000`；2026-05-12 反馈后 updated ridge `65.6960`。
+  - route pool：
+    - HAT-HAT `alpha=0.65 + cubic blend=0.015`
+    - HAT+Mamba `alpha=0.90/0.95 raw`
+    - 三路 `0.60/0.30/0.10 raw`
+    - 三路 `0.55/0.35/0.10 raw`
+  - proxy router：
+    - k3 selected `41.73180`，oracle `41.73703`
+    - k4 selected `41.73199`，oracle `41.73703`
+  - ridge-like router：
+    - 输出 augmented metrics：`experiments/router_metrics_20260511/platform_augmented_hhat_vs_hhmamba_full120/`
+    - k3 selected 提交前旧 ridge `65.7015`
+    - k4 selected 提交前旧 ridge `65.7036`；2026-05-12 反馈后 updated ridge `65.6994`
+    - k4 routed metrics：`experiments/router_metrics_20260511/routed_hhat_vs_hhmamba_full120/k4_ridge.csv`
+    - k4 routed full120：`PSNR 33.87647 / SSIM 0.99797 / Edge 0.97689 / LPIPS 0.04589 / proxy 41.72627`
+    - test route split：`75` 张走 HAT-HAT low-blend，`25` 张走三路 `0.60/0.30/0.10`。
+- 新增提交生成准备：
+  - `src/make_hat_hat_mambair_routed_submission.py`
+  - 支持固定 default route 或读取 `test_route_assignments.csv`，生成 HAT/HAT/MambaIRv2 合法 image-space ensemble 包。
+  - 已通过 `python3 -m py_compile src/make_hat_hat_mambair_routed_submission.py`
+  - 当前只补能力，不生成 test PNG/zip。
+- low-Mamba fixed full120：
+  - log：`logs/eval_hat_hat_mambairv2_lowmamba_full120_20260511.log`
+  - summary：`experiments/hat_hat_mambairv2_lowmamba_full120_sweep_20260511.csv`
+  - metrics dir：`experiments/router_metrics_20260511/hat_hat_mambairv2_lowmamba_full120/`
+  - best by ridge：`0.60/0.35/0.05 raw`
+  - metrics：`PSNR 33.87895 / SSIM 0.99797 / Edge 0.97689 / LPIPS 0.04601 / proxy 41.72854`
+  - 提交前旧 proxy-fit estimate `65.7320`，ridge estimate `65.7045`；2026-05-12 反馈后重算为 proxy-fit `65.7244`，updated ridge `65.7003`
+  - 这是当前平台拟合第一的小刷候选；它比 routed k4 ridge 略高，且比 routed 包简单。
+  - proxy best 仍是三路 `0.60/0.30/0.10 raw = 41.73174`；2026-05-12 反馈后 proxy-fit `65.7303`，但 ridge 只有约 `65.692`。
+- 决策：
+  - 2026-05-12 已提交 fixed low-Mamba `0.60/0.35/0.05 raw` 并返回 `65.6887`。
+  - 反馈后未提交候选排序变为：`0.65/0.30/0.05 raw` 约 `65.6997`、k4 ridge router 约 `65.6994`、HAT-HAT `alpha=0.65 + cubic blend=0.005` 约 `65.6960`、proxy-best 三路 `0.60/0.30/0.10 raw` 约 `65.692` ridge。
+  - 这些仍都是 `65.69~65.70` 级小刷候选，不是 `66` 强信号。
+
+## 2026-05-12 fixed low-Mamba 小刷包生成
+- 生成包：
+  - `submission/fqy_hat_hat_mambair_lowmamba_603505_raw.zip`
+- 生成命令核心：
+  - `src/make_hat_hat_mambair_routed_submission.py`
+  - `--default-route hhmamba_603505`
+  - current native-io HAT 8-TTA `0.60`
+  - previous non-native HAT 8-TTA `0.35`
+  - MambaIRv2-Large non-TTA `0.05`
+  - raw，无 LR-only blend。
+- 日志：
+  - `logs/make_hat_hat_mambair_lowmamba_603505_raw_submission_20260512.log`
+- 本地依据：
+  - full120 `PSNR 33.87895 / SSIM 0.99797 / Edge 0.97689 / LPIPS 0.04601 / proxy 41.72854`
+  - 提交前旧 proxy-fit 估计 `65.7320`
+  - 提交前旧 ridge 估计 `65.7045`
+  - 2026-05-12 线上反馈后重算：proxy-fit `65.7244`，updated ridge `65.7003`
+- 校验结果：
+  - zip size `14372946`
+  - 单一顶层目录：`fqy_hat_hat_mambair_lowmamba_603505_raw/`
+  - 包内有 `README.md`
+  - `preliminary/*.png` 共 `100` 张
+  - 全部 PNG 为 `640x512`、8-bit grayscale
+- 线上反馈：
+  - 平台分：`65.6887`
+  - 相对上一 best `65.6804` 为 `+0.0083`
+  - 这是当前最新合法线上 best。
+- 记录：
+  - `experiments/submission_log.csv` 已补 `platform_score=65.6887`。
+  - 新反馈纳入后，`src/rank_platform_candidates.py` 拟合更新为 `platform = -11.246223 + 1.844556 * proxy`，RMSE `0.04582`。
+  - 新拟合估算 `66` 需要 local proxy 约 `41.87795`，`67` 需要约 `42.42009`。
+  - 新反馈纳入后 fixed low-Mamba `0.60/0.35/0.05 raw` 仍是 ridge 排名第一：proxy-fit `65.7244`，updated ridge `65.7003`。
+  - 未提交的 `0.65/0.30/0.05 raw`、k4 ridge router、HAT-HAT `alpha=0.65 + cubic blend=0.005` 和三路 proxy-best 都没有比它更强的线上预期；当前候选池仍是小刷空间，不是 `66` 路线。
+
+## 2026-05-12 继续冲 66：NTIRE2026 infrared x4 官方仓库补扫关闭
+- 新公开仓库：
+  - `external_models/NTIRE2026_infraredSR`
+  - 来源为 NTIRE 2026 Remote Sensing Infrared SR x4 官方参与队伍代码/权重；本赛是 x2，因此只做合法 sanity：x4 输出再用确定性 `area` 下采样到 `640x512` 后评估。
+- Stage A 结果：
+  - team00 DAT baseline：
+    - 权重：`external_models/NTIRE2026_infraredSR/downloaded_weights/team00_DAT/team00_dat.pth`
+    - log：`logs/eval_ntire2026_ir_x4_team00_dat_to_x2_smoke4_20260512.log`
+    - metrics：`experiments/router_metrics_20260512/ntire2026_ir_x4_team00_dat_to_x2_area_smoke4.csv`
+    - smoke4 proxy `44.50308`，低于 Stage A `45.20`，关闭。
+  - team03 HAT/PFT ensemble：
+    - 权重：`external_models/NTIRE2026_infraredSR/downloaded_weights/team03_XJRes/team03_XJRes_download`
+    - 四模型 HAT/PFT ensemble 整图单张 `timeout 240s` 仍无输出，不适合继续扩。
+    - 拆 `hat_1` 单支 sanity：`experiments/router_metrics_20260512/ntire2026_ir_x4_team03_hat1_to_x2_area_smoke4.csv`
+    - smoke4 proxy `40.00006`，关闭。
+  - team10 HAT-L two-model ensemble：
+    - 权重包：`external_models/NTIRE2026_infraredSR/downloaded_weights/team10_FengFans/team10_FengFans/`
+    - 非 TTA 单支 sanity：
+      - `model_s1.pth`：`40.18305`
+      - `model_bsr100k.pth`：`40.04407`
+    - 两支都远低于 Stage A，不跑官方 16 次前向 TTA ensemble，关闭。
+  - team09 SiGMoid MambaIRv2：
+    - 权重：`external_models/NTIRE2026_infraredSR/downloaded_weights/team09_SiGMoid/team09_SiGMoid_download`
+    - metrics：`experiments/router_metrics_20260512/ntire2026_ir_x4_team09_sigmoid_to_x2_area_smoke4.csv`
+    - smoke4 proxy `40.11812`，关闭。
+- A2D2 visible-road 旧线复核：
+  - 已有 full static `experiments/source_match_a2d2_preview_frontcenter_20260510.csv` 的最优 total score 约 `0.43984`，高于之前 visible-road probe gate `0.43`。
+  - 虽然早期 smoke64 曾有 `0.42821`，full static 已不足以开 matched-data/probe；不重开 A2D2 训练。
+- 决策：
+  - 本轮没有任何新候选达到 `proxy >= 45.20`。
+  - 不进入 probe40/full120，不生成 test PNG/zip。
+  - NTIRE2026 x4 官方仓库的已测高价值分支关闭；后续仍只找明确 x2、可复现、未测过的公开权重/主干，或真正结构性增益。
+
+## 2026-05-12 继续冲 66：新增公开 x2/IR 权重 sanity 关闭
+- EAMamba：
+  - 仓库：`external_models/EAMamba`
+  - 权重下载：`external_models/EAMamba/checkpoints/realsrx2.pth`
+  - 新增评估脚本：`src/evaluate_eamamba_gray.py`
+  - smoke4：`experiments/router_metrics_20260512/eamamba_realsrx2_smoke4.csv`
+  - 结果：proxy `30.66190`，明显不适配本赛红外域，关闭。
+- GPSMamba / IRSRMamba：
+  - 已有单支 smoke4 best：
+    - GPSMamba x2：`43.44194`
+    - IRSRMamba x2：`43.09043`
+  - 新增 `src/evaluate_hat_external_ensemble.py` 支持 `--external-kind gpsmamba|irsrmamba`。
+  - HAT 8-TTA + GPSMamba low-weight smoke4 best：`45.49445`
+  - HAT 8-TTA + IRSRMamba low-weight smoke4 best：`45.49326`
+  - 二者均低于当前三路 HAT/HAT/MambaIRv2 smoke 基线 `45.51503`，关闭，不进 probe40。
+- DifIISR / Swin2-MoSE：
+  - DifIISR x4->x2 area smoke4 best：`37.27571`
+  - Swin2-MoSE Sen2Venus x2 smoke4 best：`33.78286`
+  - 均低于 Stage A，关闭。
+- RPT-SR / VmambaIR / HPEN：
+  - RPT-SR 当前公开仓库只有 x4 代码/配置，未见可用权重，关闭为 blocked。
+  - VmambaIR 当前本地仓库未见明确 stage-1 x2 权重，关闭为 blocked。
+  - HPEN 2026 论文代码已确认有 x2 配置，但 GitHub 无 release/tag，仓库内也无 `.pth/.pt/.onnx` 权重，关闭为 blocked；不从零重训。
+- 记录：
+  - 上述结果已补入 `experiments/probe_summary_20260510.csv`。
+  - 无强信号，不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：三路 fine probe 与 LDFF 补扫关闭
+- 三路 low-Mamba fine probe40：
+  - log：`logs/eval_hat_hat_mambairv2_fine_probe40_20260512.log`
+  - summary：`experiments/hat_hat_mambairv2_fine_probe40_20260512.csv`
+  - metrics：`experiments/router_metrics_20260512/hat_hat_mambairv2_fine_probe40/`
+  - best：`0.55/0.35/0.10 raw = 43.20911`
+  - 旧三路 probe40 best：`43.20913`
+  - 结论：fine smoke4 的 `+0.00070` 没有泛化到 probe40；关闭，不进 full120。
+- LDFF-Net：
+  - 仓库：`external_models/LDFF-Net`
+  - 新增评估脚本：`src/evaluate_ldff_gray.py`
+  - 权重：`external_models/LDFF-Net/weight/LDFF_Net/net_params_1000.pkl`
+  - 权重实际匹配 `up_scale=4`，因此只做合法 `x4 -> area downsample -> x2` sanity。
+  - smoke4：`experiments/router_metrics_20260512/ldff_x4_to_x2_area_smoke4.csv`
+  - 结果：proxy `32.32098`，关闭。
+- MPSR / MSLRSR / GARLSR：
+  - MPSR：当前公开仓库缺可直接复现推理代码/完整权重条件，blocked。
+  - MSLRSR：未见公开权重，blocked。
+  - GARLSR：未见公开训练权重，blocked。
+- 决策：
+  - 本轮没有任何 `66` 强信号。
+  - 不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：HAT TLC 推理 sanity 关闭
+- 背景：
+  - NTIRE 2026 方案描述里提到 HAT-L 使用 Test-time Local Converter；此前只测过 tile overlap，没有真正替换 HAT 内部 `AdaptiveAvgPool2d(1)`。
+- 改动：
+  - `src/evaluate_hat_gray.py` 新增 `--tlc-base-size` / `--tlc-train-size`，把 HAT channel attention 中的全局平均池化替换为局部统计池化。
+- smoke4：
+  - base32/train96：`experiments/router_metrics_20260512/hat_nativeio_tlc_b32_smoke4.csv`
+    - proxy `39.75088`
+  - base64/train96：`experiments/router_metrics_20260512/hat_nativeio_tlc_b64_smoke4.csv`
+    - proxy `39.74726`
+- 结论：
+  - 两个局部统计半径都大幅低于当前 HAT no-TTA raw smoke `45.38694`。
+  - TLC 对当前 native-io HAT checkpoint 不适配，关闭，不进 TTA/probe40/full120。
+
+## 2026-05-12 继续冲 66：GSASR / ContinuousSR / OpenModelDB metadata 补扫关闭
+- 新增 GSASR evaluator：
+  - 编译 `external_models/GSASR` 的 `gscuda` 扩展成功，日志 `logs/build_gsasr_gscuda_20260512.log`。
+  - 新增 `src/evaluate_gsasr_gray.py`。
+  - fixed smoke4：
+    - `EDSR_DF2K`：`43.75804`
+    - `HATL_SA1B`：`43.74799`
+  - 两者都低于 Stage A `45.20`，关闭。
+- 新增 ContinuousSR evaluator：
+  - 安装 `gsplat` / `tensorboardX` 到 user site，新增 `src/evaluate_continuoussr_gray.py`。
+  - `bf16` 与 `gsplat` CUDA 核不兼容，改 `--amp off` 后 fixed smoke4 成功。
+  - HF `pey12/ContinuousSR` fixed smoke4 只有 `10.15368`，任务/输出定义不匹配，关闭。
+- 追加 OpenModelDB metadata 直连补扫：
+  - SwinIR real-SR x2 PSNR：`40.10487`
+  - StarSample V2 Lite SPAN：`37.86027`
+  - HFA2k AVCSRFormer-light：`39.25230`
+  - AnimeSharpV4 RCAN / Fast RCAN-PU：`42.32238 / 40.38703`
+  - HFA2k AVC OmniSR / Compact：`40.07652 / 39.57743`
+  - Bubble AnimeScale SwinIR-small：`40.21039`
+  - ModernSpanimationV1：`38.36413`
+  - StarSample V2 ESRGAN：`39.67283`
+  - GameUpV2 TSCUNet-Small 与 HFA2k AVC EDSR-M 当前本地 Spandrel/评估路径不支持，且同批可跑模型明显低于门槛，记为 closed/blocked。
+- 追加复核：
+  - HF `sergeipetrov/swin2SR-classical-sr-x2-64` fixed smoke4 `44.37165`，与 caidas mirror 同级，关闭。
+  - 三路 HAT/HAT/MambaIRv2 的 Mamba `g` 通道灰度 fixed smoke4 best `45.51529`，低于默认 avg/raw `45.51597`，关闭。
+- 决策：
+  - 本轮没有任何新候选达到 `45.20`，不进 probe40/full120。
+  - 不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：SeemoRe x2 关闭
+- 仓库：
+  - `external_models/SeemoRe`
+  - Google Drive checkpoint 文件夹可通过 `gdown --folder` 获取，日志 `logs/download_seemore_gdrive_20260512.log`。
+- fixed smoke4：
+  - `SeemoRe_T_X2`：`43.91565`
+  - `SeemoRe_B_X2`：`43.99228`
+  - `SeemoRe_L_X2`：Drive 下载文件两次都是坏的 PyTorch zip，日志 `logs/download_seemore_l_x2_retry_20260512.log`
+- 结论：
+  - 可跑的 T/B 都低于 Stage A `45.20`。
+  - L 权重 blocked，但同族 B/T 已明显不接近门槛，不再继续追可视化包或其它镜像。
+
+## 2026-05-12 继续冲 66：MaIR 官方 x2 关闭
+- 仓库：
+  - `external_models/MaIR`
+  - 官方 Google Drive checkpoint 已下载到 `external_models/MaIR/ckpt_download/`，日志 `logs/download_mair_gdrive_20260512.log`。
+- 新增评估脚本：
+  - `src/evaluate_mair_gray.py`
+  - 复用固定 smoke4、灰度输入三通道复制、输出灰度聚合与 LPIPS proxy 口径。
+- fixed smoke4：
+  - `MaIR_T_lightSR_x2`：`43.85979`
+  - `MaIR_S_lightSR_x2`：`44.01455`
+  - `MaIR_SR_x2`：`44.39910`
+- 结论：
+  - 三个官方 x2 权重均低于 Stage A `45.20`，不进 probe40/full120。
+  - 不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：RPT-SR / ThermalSR / Phips 2x 批扫关闭
+- RPT-SR：
+  - 论文 HTML 给出官方仓库 `Yonsei-STL/RPT-SR`，本地为 `external_models/RPT-SR`。
+  - 仓库当前只有 x4 option，`pretrain_network_g` 为作者本地绝对路径；HF 搜索未发现公开模型权重。
+  - 结论：无公开 x2 checkpoint，blocked/closed，不从零训练。
+- ThermalSuperResolution：
+  - 本地为 `external_models/ThermalSuperResolution`。
+  - release 权重为 ImageNet x4、thermal track1 x8、track2 x8/x16；track2 还需要 visible/reference 输入。
+  - 结论：无本赛 x2 非引导 checkpoint，关闭。
+- Phips/HF 2x safetensors 批扫：
+  - 下载到 `external_models/HF_weights/Phips_2x_scan_20260512/`，使用 `src/evaluate_spandrel_gray.py` 固定 smoke4。
+  - best：`2xLexicaRRDBNet = 41.88332`
+  - 其后：`2xHFA2k_compact_multijpg = 40.25809`，`2xNomosUni_compact_multijpg = 39.85607`，`2xHFA2k_LUDVAE_compact = 39.09841`
+  - 其余 13 个 Evangelion/HFA2k/NomosUni/Lexica/Real-CUGAN/ESRGAN/SPAN/OmniSR/SwinIR 候选均在 `28.36~38.58`。
+- 决策：
+  - 本批没有任何模型接近 Stage A `45.20`。
+  - 不进 probe40/full120，不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：ATD v2 同口径复核关闭
+- 背景：
+  - 早期 ATD 只在旧 4 张/无 LPIPS 口径下扫过，本轮补固定 smoke4 + LPIPS。
+  - 官方仓库重新 clone 到 `external_models/ATD`，Google Drive pretrained 已下载，日志 `logs/download_atd_pretrained_gdrive_20260512.log`。
+- 改动：
+  - `src/evaluate_atd_gray.py` 新增 `--names-file` / `--metrics-csv` / `--variant {base,light}`。
+  - `src/evaluate_hat_external_ensemble.py` 新增 `--external-kind atd`。
+- fixed smoke4：
+  - ATD v2 base x2：`44.70669`
+  - ATD v2 light x2：`44.06551`
+  - ATD v1 base 权重与当前官方代码结构不匹配，记为 blocked。
+- HAT 8-TTA + ATD v2 base alpha sweep：
+  - summary：`experiments/hat_tta_atd_v2_fixedsmoke4_20260512.csv`
+  - best：`alpha_hat=0.90 raw = 45.50786`
+- 结论：
+  - ATD 单支未过 Stage A `45.20`。
+  - HAT+ATD 虽接近，但仍低于 HAT-HAT `45.51113` 和三路 HAT/HAT/Mamba `45.515+` 主线，不进 probe40/full120。
+
+## 2026-05-12 继续冲 66：OpenModelDB 小洞 / DRCT x4 sanity 关闭
+- OpenModelDB pretrained/downsample 小洞：
+  - `2x-ESRGAN` fixed smoke4：`39.42583`
+  - `2xLexicaSwinIR` fixed smoke4：`42.39638`
+  - `2x_realplksr_mssim_pretrain` fixed smoke4：`41.44015`
+  - `2x-PSNR` Google Drive 仍无法由 `gdown` 获取，日志 `logs/download_2x_psnr_pretrained_20260512.log`。
+- DRCT x4 -> x2：
+  - 来源：HF `aaronespasa/drct-super-resolution`，下载到 `external_models/HF_weights/aaronespasa_drct_super_resolution/`。
+  - `DRCT_BASE_x4` 合法 `area` 下采样到 x2 fixed smoke4：`37.25453`。
+  - base 已远低于门槛，不再跑 `DRCT_L_x4`。
+- 结论：
+  - 本批均低于 Stage A `45.20`，关闭。
+
+## 2026-05-12 继续冲 66：四路 HAT/HAT/Mamba/ATD 微正但不足
+- 改动：
+  - `src/evaluate_hat_hat_mambair_ensemble.py` 新增可选 `--atd-weights` 四路模式；未传 ATD 时保持原三路行为。
+  - 新增显式清单 `manifests/val_smoke16_seed42.txt`，取 `val_probe40_seed42.txt` 前 16 张，避免裸 `--limit`。
+- fixed smoke4：
+  - summary：`experiments/hat_hat_mambairv2_atd4_fixedsmoke4_20260512.csv`
+  - best：`0.55/0.375/0.05/0.025 raw = 45.51734`
+  - 同场 `ATD=0` 基线：`45.51567`
+- smoke16：
+  - summary：`experiments/hat_hat_mambairv2_atd4_smoke16_20260512.csv`
+  - best：`0.55/0.375/0.045/0.03 raw = 43.63994`
+  - 同场 `ATD=0` 基线：`43.63770`
+- probe40：
+  - summary：`experiments/hat_hat_mambairv2_atd4_probe40_20260512.csv`
+  - best：`0.535/0.375/0.065/0.025 raw = 43.20996`
+  - 同场 `ATD=0` 基线：`43.20718`
+  - 33/40 张相对同场基线为正，mean gain `+0.00279`。
+  - 但相对既有三路 probe40 `43.20913` 只有 `+0.00083`，LPIPS `0.03918` 也不比主线更稳。
+- LR cluster router 复核：
+  - 使用 `probe40` + 初赛 test 的显式 feature CSV：
+    - `experiments/lr_clusters_probe40_initialtest_k3_from_full120.csv`
+    - `experiments/lr_clusters_probe40_initialtest_k4_from_full120.csv`
+    - `experiments/lr_clusters_probe40_initialtest_k5_from_full120.csv`
+  - k3 selected：`43.21091`，相对旧三路 `43.20911` 只 `+0.00180`；oracle `43.21282`。
+  - k4/k5 selected：`+0.00147 / +0.00091`。
+- 结论：
+  - 四路 ATD 即使加 cluster router 也只能算微弱小刷，不是 `66` 强信号。
+  - 不进 full120，不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：NTIRE2026 infrared 剩余队伍 x4/x8 补扫关闭
+- 下载：
+  - 用 `gdown` 文件 ID 方式补齐 `team02/05/06/07/08/11/12/14/15`，日志 `logs/download_ntire2026_ir_remaining_teams_retry_20260512.log`。
+  - team08 zip 内为提交 PNG 输出，不是模型权重，按规则不用于验证/集成，关闭。
+- 新增评估能力：
+  - `src/evaluate_ntire2026_ir_x4_gray.py`：调用各队官方 `io.main`，输出 x4/x8 后合法 `area` 下采样到本赛 x2 尺寸计分。
+  - `src/evaluate_fremamba_x4_gray.py`：team06 FreMamba 最小可复现评估；仅补 `thop` stub，不改外部模型。
+  - `src/evaluate_team14_irsrmamba_x4_gray.py`：team14 IRSRMamba strict-load 评估；`net_g_15000` 用 `irsrmamba_arch.py depth=6`，`net_g_45000` 用 `irsrmamba_arch_5.py depth=8`。
+  - 为 team14 运行依赖补装 `PyWavelets`。
+- fixed smoke4 结果：
+  - team02 SUATSR x4->x2：`40.07050`
+  - team05 hit_zzy x4->x2：`39.96722`
+  - team06 FreMamba x4->x2：`40.07997`
+  - team07 NTR x4->x2：`40.01457`
+  - team11 WHU-VIP x4->x2：`40.14134`
+  - team12 davinci x4->x2：`net_g_295000 40.15087`，`net_g_30000 40.15668`，`net_g_45000 40.15971`
+  - team14 NUDT IRSRMamba x4->x2：`net_g_15000 40.13211`，`net_g_45000 39.26488`
+  - team15 CASWiT `best.pt` x8->x2：`39.99199`
+- 结论：
+  - 剩余 NTIRE2026 infrared 队伍均远低于 Stage A `45.20`，没有 ensemble/router 价值。
+  - 不进 probe40/full120，不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：DFLIP MambaIRv2-Large 刷新 proxy 但非 66 强信号
+- 新增公开权重：
+  - HF `dslisleedh/MambaIRV2L_DFLIP_X2`，权重 `external_models/HF_weights/dslisleedh__MambaIRV2L_DFLIP_X2/MambaIRV2L_DFLIP_X2.pth`，可用现有 MambaIRv2-Large strict-load。
+  - HF `dslisleedh/PFT_DFLIP_X2`，权重 `external_models/HF_weights/dslisleedh__PFT_DFLIP_X2/PFT_DFLIP_X2.pth`，PFT 自定义 CUDA 需 `--amp off`。
+  - HF `XiangZ/hit-srf-2x-df2k`，新增 `src/evaluate_hit_srf_gray.py`，官方 HiT-SR 仓库 `external_models/HiT-SR` strict-load 成功，训练数据为公开 DF2K。
+- 单支 fixed smoke4：
+  - MambaIRv2L DFLIP：`44.97740`，低于 Stage A `45.20` 但明显强于旧 Mamba 单支，进入 ensemble。
+  - PFT DFLIP：`44.70417`，关闭。
+  - HiT-SRF DF2K x2：`44.28415`，关闭。
+- DFLIP 三路 HAT/HAT/Mamba：
+  - smoke4：`experiments/hat_hat_mambairv2l_dflip_smoke4_20260512.csv`，best `0.45/0.40/0.15 raw = 45.52320`。
+  - smoke16 去重复核：`experiments/hat_hat_mambairv2l_dflip_smoke16_unique_20260512.csv`，best `0.425/0.425/0.15 raw = 43.64407`。
+  - probe40：`experiments/hat_hat_mambairv2l_dflip_probe40_post_20260512.csv`，best `0.525/0.25/0.225 + linear blend 0.01 = 43.22218`；raw wide best `43.22147`。
+  - highpass residual probe40 best `43.22097`，低于普通 blend，关闭。
+  - `src/evaluate_hat_hat_mambair_cache_sweep.py` 增加 duplicate route 防护，避免重复权重导致同名 metrics 累加假高分。
+- full120：
+  - summary：`experiments/hat_hat_mambairv2l_dflip_full120_20260512.csv`
+  - proxy best：`0.55/0.25/0.20 + linear blend 0.01`，`PSNR 33.89191 / SSIM 0.99796 / Edge 0.97694 / LPIPS 0.04691 / proxy 41.73975`。
+  - 相对旧离线 proxy best `41.73174` 为 `+0.00801`，刷新当前 proxy best。
+  - 但 LPIPS 明显变差，ridge 平台口径不认可；该 proxy best ridge 仅 `65.6672`。
+  - `rank_platform_candidates.py` 重新排序后，DFLIP 低权重 `0.60/0.35/0.05 raw` ridge `65.7034` 居前，但 full120 proxy 只有 `41.72889`，本质只是已提交 low-Mamba 的极小替换版。
+- 结论：
+  - DFLIP 是当前最好的新公开权重互补线，已刷新本地 proxy best。
+  - 但按 65.6887 后的四指标 ridge 口径仍不是 `66` 强信号，不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：SST DFLIP + TTA 大幅抬升但仍未到 66
+- 新增公开权重与代码：
+  - 官方 SST 仓库已接入 `external_models/SST`。
+  - 新增 `src/evaluate_sst_gray.py`，支持 `base/base_plus/large/large_plus/xl_plus`，支持 x2/x3/x4 权重与合法下采样到本赛 x2。
+  - `src/evaluate_hat_external_ensemble.py` 新增 `sst` 外部模型、预测缓存 `--cache-dir/--refresh-cache`。
+  - 新增 `src/evaluate_cached_ensemble.py`，用于复用 `.pt` 预测缓存做合法 image-space weighted ensemble/full120 sweep。
+- SST DFLIP x2 单支 fixed smoke4：
+  - SST DF2K base x2：`44.45280`，关闭。
+  - SSTLarge DFLIP x2：`44.76073`。
+  - SSTLarge_Plus DFLIP x2：`44.76744`。
+  - SSTXLarge_Plus DFLIP x2：`44.81200`，为 SST 单支最佳。
+  - SSTXLarge_Plus 灰度输入模式：`avg 44.81200` 最好，`y/r/g/b` 均更低。
+- HAT + SSTXLarge_Plus DFLIP 非 TTA：
+  - smoke4：`experiments/hat_sstxlarge_dflip_smoke4_20260512.csv`，best `alpha_hat=0.85 raw = 45.52726`。
+  - smoke16 fine：`experiments/hat_sstxlarge_dflip_smoke16_fine_20260512.csv`，best `alpha_hat=0.675 raw = 43.71121`。
+  - probe40：`experiments/hat_sstxlarge_dflip_probe40_20260512.csv`，best `alpha_hat=0.65 raw = 43.30559`。
+  - full120：`experiments/hat_sstxlarge_dflip_full120_20260512.csv`，best `alpha_hat=0.675 raw = 41.80085`。
+- HAT/HAT/SSTXLarge_Plus DFLIP 非 TTA：
+  - full120：`experiments/hat_hat_sstxlarge_dflip_full120_20260512.csv`，best raw `cur/prev/sst = 0.525/0.175/0.300 = 41.80175`。
+  - post sweep：`experiments/hat_hat_sstxlarge_dflip_full120_post_20260512.csv`，proxy best `0.525/0.175/0.300 + linear blend 0.005 = 41.80260`，但 ridge 更偏 raw。
+  - 四路 HAT/HAT/SST/Mamba 非 TTA：Mamba 小权重没有收益，best 仍是 no-Mamba `41.80175`。
+- SST-TTA：
+  - SSTXLarge_Plus DFLIP x2 单支 TTA smoke4：`45.12944`，单支仍未过 Stage A `45.20`，但 ensemble 互补显著。
+  - HAT + SST-TTA smoke4：`experiments/hat_sstxlarge_dflip_tta_smoke4_20260512.csv`，best `alpha_hat=0.75 raw = 45.53995`。
+  - smoke16：`experiments/hat_sstxlarge_dflip_tta_smoke16_20260512.csv`，best `alpha_hat=0.65 raw = 43.73681`。
+  - probe40：`experiments/hat_sstxlarge_dflip_tta_probe40_20260512.csv`，best `alpha_hat=0.60 raw = 43.34629`。
+  - full120：`experiments/hat_sstxlarge_dflip_tta_full120_20260512.csv`，best `alpha_hat=0.55 raw = 41.83950`，`PSNR 33.98789 / SSIM 0.99800 / Edge 0.97755 / LPIPS 0.04575`。
+- HAT/HAT/SST-TTA full120：
+  - initial sweep：`experiments/hat_hat_sstxlarge_dflip_tta_full120_20260512.csv`，best raw `0.45/0.10/0.45 = 41.84038`。
+  - wide sweep：`experiments/hat_hat_sstxlarge_dflip_tta_full120_wide_20260512.csv`，best raw `0.40/0.125/0.475 = 41.84098`。
+  - fine post：`experiments/hat_hat_sstxlarge_dflip_tta_full120_finepost_20260512.csv`，proxy best `0.38/0.14/0.48 + linear blend 0.005 = 41.84131`，ridge 更偏 raw `0.38/0.14/0.48 = 41.84106`。
+  - grid025：`experiments/hat_hat_sstxlarge_dflip_tta_full120_grid025_20260512.csv`，ridge top `cur/prev/sst = 0.30/0.20/0.50 raw`，`proxy 41.84099 / ridge 65.8652 / proxy-fit 65.9318`。
+  - 当前 per-image oracle 只有 `41.86064`，相对 proxy best gain `+0.01933`，仍不足以把合法 router 当成 66 级证据。
+- 平台口径：
+  - `logs/rank_platform_candidates_after_grid025_20260512.log` 当前第一为 `0.30/0.20/0.50 raw`，ridge `65.8652`。
+  - proxy best `41.84131` 相比 DFLIP Mamba best `41.73975` 大幅提升 `+0.10156`，但仍低于经验 66 线约 `0.0366`。
+  - ridge/proxy-fit 都接近但没有越过 66，不生成 test PNG/zip。
+- 关闭项：
+  - SST DF2K family best smoke4 `44.71285`，低于 DFLIP，关闭。
+  - SST x4->x2 best `44.47401`、x3->x2 `42.62456`，关闭。
+  - PFT DFLIP x2 TTA smoke4 `44.85007`，低于 SST-TTA，关闭。
+  - HF keyword sweep 暂无新的可用 x2 权重。
+
+## 2026-05-12 继续冲 66：SST 细化补洞与弱分支关闭
+- SST-TTA / SST non-TTA split：
+  - full120 四源 `cur/prev/sst_tta/sst_raw` sweep：`experiments/hat_hat_ssttta_sstraw_full120_20260512.csv`。
+  - non-TTA SST 权重没有收益，top raw `0.300/0.225/0.475/0.000 = 41.84127`；ridge 仍更偏 `0.275/0.225/0.500 raw`。
+  - top post sweep：`experiments/hat_hat_ssttta_top_post_full120_20260512.csv`，proxy best `0.300/0.225/0.475 + linear blend 0.005 = 41.84153`，但 LPIPS 变差，ridge 仍不把它排第一。
+  - `logs/rank_platform_candidates_after_ssttta_top_post_20260512.log`：当前 ridge top 约 `65.8653`，proxy-fit best 约 `65.9328`，仍未到 `66`。
+- SSTLarge_Plus / SSTlight：
+  - `SSTLarge_Plus_DFLIP_X2` TTA + HAT smoke4 best `45.51180`，低于 SSTXLarge_Plus TTA；HAT/HAT/SSTXL/SSTLargePlus smoke4 top 的 LargePlus 权重为 `0`，关闭。
+  - high-prev full120 sweep top `41.84127`，没有超过当前 best。
+  - HF `SSTlight_DFLIP_X2` / `SSTlight_Plus_DFLIP_X2` 已接入 `light/light_plus` variant，fixed smoke4 `44.32178 / 44.41257`，低于 Stage A，关闭。
+- 其它补洞：
+  - Real-IISR 本地有 `14G` checkpoint，但 README/参数是 real-world x4 autoregressive 路线，和本赛 x2 干净 SR 不匹配；不做硬推。
+  - DFLIP MambaIRv2-Large TTA smoke4 best `45.52312`，略低于同权重 non-TTA `45.52320`，关闭，不进 probe40/full120。
+- 决策：
+  - 当前离线 proxy best 暂记 `41.84153`，但平台 ridge 认可的第一仍在 `41.8410` 左右、估计 `65.8653`。
+  - 继续找能补 LPIPS/PSNR 的合法互补模型或公开 x2 权重；没有 `66` 强信号，仍不生成 test PNG/zip。
+
+## 2026-05-12 继续冲 66：SSTXLarge_Plus DFLIP 合法微调复核
+- 代码：
+  - `src/model_registry_gray.py` / `src/train_generic_gray.py` 已接入 `family=sst`，用于公开 SST 权重的灰度 continuation。
+  - 新增 `src/cache_sst_gray.py`，只缓存 SST 预测，复用已有 HAT 预测缓存做 full120 ensemble sweep。
+- eval-only 对齐：
+  - generic trainer smoke4 eval-only 复现 `SSTXLarge_Plus_DFLIP_X2` 单支 `44.81200`。
+- `limit128 p96 lr5e-7`：
+  - smoke16 holdout 单支：`43.31549 -> 43.33277`；注意该 checkpoint 的 probe40 ensemble 因 holdout 不一致只作方向参考，不作 clean 决策。
+  - probe40 clean holdout 单支：`42.93670 -> 42.95057`。
+  - probe40 clean HAT+SST-TTA：best `alpha_hat=0.45 raw = 43.35853`，相对原版 HAT+SST-TTA probe40 `43.34629` 为 `+0.01224`。
+  - full120 clean 单支：`41.46293 -> 41.47269`。
+  - full120 two-source HAT+fineSST：best `0.50/0.50 raw = 41.84090`，仅比原版 HAT+SST-TTA `41.83950` 高 `+0.00140`。
+  - full120 three-source current/previous/fineSST：raw best `0.30/0.225/0.475 = 41.84221`；post proxy best `0.30/0.225/0.475 + linear blend 0.0025 = 41.84238`。
+  - 但 LPIPS 变差：新 proxy best `LPIPS 0.04615`，`rank_platform_candidates.py` 对该分支最高 ridge 只有约 `65.8555`，低于原版 SST-TTA raw ridge `65.8653`。
+- `limit512 p96 lr5e-7`：
+  - full120 clean 单支掉到 `41.34608`，相对起点 `41.46293` 大幅下降，关闭。
+- 决策：
+  - SST 微调确有小幅 clean probe40/full120 方向正信号，但进入 HAT/HAT/SST ensemble 后只剩千分级 proxy 增益且 LPIPS/ridge 变差。
+  - 不生成 test PNG/zip；SST 微调线冻结，除非后续只做极轻量不同 LR sanity，不再长跑同族 continuation。
+
+## 2026-05-12 应用户要求生成 SST-TTA 提交候选
+- 新增 `src/make_hat_hat_sst_submission.py`，用于生成合法 fixed HAT/HAT/SST image-space ensemble 提交包。
+- 已生成 `submission/fqy_hat_hat_ssttta_275225500_raw.zip`：
+  - 配置：current native-io HAT-L 8-TTA `0.275` + previous HAT-L 8-TTA `0.225` + public `SSTXLarge_Plus_DFLIP_X2` 8-TTA `0.500`。
+  - 后处理：raw，`blend_interp=0`，`clip_mode=hard`。
+  - 本地 full120 对应 ridge top：`PSNR 33.98939 / SSIM 0.99801 / Edge 0.97756 / LPIPS 0.04577 / proxy 41.84101`。
+  - 平台估计：ridge `65.8653`，proxy-fit `65.9319`；预期高于当前线上 best `65.6887`，但仍非稳 66。
+  - zip 校验：`101` entries、单一顶层目录 `fqy_hat_hat_ssttta_275225500_raw/`，含 `README.md` 与 `preliminary/*.png`；`100` 张 PNG 均为 `640x512` 8-bit grayscale。
+- 该包为用户主动要求的小赌提交候选；提交后需回填线上分。
+
+## 2026-05-13 SST-TTA 提交线上反馈
+- `submission/fqy_hat_hat_ssttta_275225500_raw.zip` 已提交并返回线上 `65.9109`。
+- 相对上一合法线上 best `65.6887` 提升 `+0.2222`；距离 `66` 还差 `0.0891`。
+- `experiments/submission_log.csv` 与 `experiments/probe_summary_20260510.csv` 已回填该线上分。
+- 用 `65.9109` 反馈后重跑 `src/rank_platform_candidates.py`，日志为 `logs/rank_platform_candidates_after_sst_submit_20260513.log`：
+  - proxy-fit：`score=-11.153564+1.842257*proxy`，RMSE `0.04407`。
+  - ridge：RMSE `0.02041`。
+  - top 仍是 HAT/HAT/SST-TTA raw 同族，ridge 约 `65.8756`、proxy-fit 约 `65.9283`；当前没有新的已知 `66` 强信号。

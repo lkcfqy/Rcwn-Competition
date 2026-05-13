@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import os
 import sys
@@ -200,7 +201,11 @@ def validate(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     print(f"device={device}")
     split = make_split(args.data, args.scale, val_count=args.val_count, seed=args.seed)
-    names = split.val[: args.limit] if args.limit else split.val
+    if args.names_file:
+        with open(args.names_file, "r", encoding="utf-8") as handle:
+            names = [line.strip() for line in handle if line.strip()]
+    else:
+        names = split.val[: args.limit] if args.limit else split.val
     print(f"val={len(names)} scale=x{args.scale}")
 
     model = build_srformer(args.variant, args.scale, args.use_checkpoint).to(device).eval()
@@ -218,17 +223,29 @@ def validate(args) -> None:
         lpips_fn = lpips.LPIPS(net=args.val_lpips_net).to(device).eval()
 
     sums = {}
+    rows = []
     for name in tqdm(names, desc="val", leave=False):
         lr, hr = load_pair(args.data, name, args.scale, device)
         with autocast_context(device, args.amp):
             pred = forward_gray(model, lr, args.gray_mode)
         metrics = measure_batch(pred.float(), hr, edge_metric, lpips_fn)
+        row = {"name": name, **metrics, "proxy": metric_proxy(metrics)}
+        rows.append(row)
         for key, value in metrics.items():
             sums[key] = sums.get(key, 0.0) + value
 
     out = {key: value / len(names) for key, value in sums.items()}
     out["proxy"] = metric_proxy(out)
     print("val_result " + " ".join(f"{k}={v:.5f}" for k, v in out.items()))
+    if args.metrics_csv:
+        Path(args.metrics_csv).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.metrics_csv, "w", newline="", encoding="utf-8") as handle:
+            fieldnames = ["name", "psnr", "ssim", "edge", "lpips", "proxy"]
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({key: row.get(key, "") for key in fieldnames})
+        print(f"metrics_csv={args.metrics_csv}")
 
 
 def parse_args():
@@ -241,6 +258,8 @@ def parse_args():
     parser.add_argument("--gray-mode", choices=["avg", "y", "r", "g", "b"], default="avg")
     parser.add_argument("--val-count", type=int, default=120)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--names-file", default="")
+    parser.add_argument("--metrics-csv", default="")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--amp", choices=["off", "fp16", "bf16"], default="bf16")
     parser.add_argument("--val-lpips-net", choices=["none", "alex", "vgg"], default="alex")

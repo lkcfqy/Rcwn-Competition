@@ -14,6 +14,7 @@ This repo is usable across computers, but only if we keep GitHub focused on sour
 - `rcwn.md`
 - `requirements.txt`
 - `.gitignore`
+- latest submitted package zip when explicitly unignored, currently `submission/fqy_hat_hat_ssttta_275225500_raw.zip`
 
 Recommended experiment records to keep:
 
@@ -31,6 +32,7 @@ Recommended experiment records to keep:
 - `logs/`
 - `submission/*.zip`
 - generated submission image folders
+- old generated submission zip files except the latest explicitly preserved one
 - local virtual environments such as `.venv/` and `.venv_h5/`
 
 These are either too large, easy to regenerate, license-sensitive, or machine-local.
