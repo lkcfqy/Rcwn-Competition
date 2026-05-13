@@ -33,6 +33,30 @@ GitHub should not contain ordinary local-heavy artifacts:
 
 Reason: this workspace is about `69G`; `external_models/` alone is about `58G`, and many checkpoint files exceed GitHub's normal `100MB` single-file limit. Use a separate disk copy, cloud bucket, or redownload public weights on the new server.
 
+## Local Cleanup Performed
+
+The local workspace was slimmed on 2026-05-13 from about `69G` to about `2.1G`.
+
+Kept local-only assets:
+
+- `超分竞赛数据集/` (`361M`)
+- `external_models/SST/`
+- `external_models/HF_weights/dslisleedh__SSTXLarge_Plus_DFLIP_X2/SSTXLarge_Plus_DFLIP_X2.pth`
+- `checkpoints_hat_l_nativeio_official_cont_limit1680_lr8e8_full120clean_avg/`
+- `checkpoints_hat_l_official_p96_cont_limit1680_lr15e7_full120clean_avg/`
+- `checkpoints_hat_l_official_cont_lr3e6_from_ep4_p48_avg/`
+- `submission/fqy_hat_hat_ssttta_275225500_raw.zip`
+
+Deleted local-only assets:
+
+- closed external-model scans under `external_models/`, including the large `NTIRE2026_infraredSR`, `Real-IISR`, `EAMamba`, `ATD`, `SwinFIR`, `OpenModelDB_weights`, and related branches
+- closed/negative checkpoint directories
+- `experiments/*/` per-image metric dirs, prediction caches, and generated output images
+- `logs/`
+- old generated submission folders and old zip files
+
+All deleted items are either recorded in CSV/markdown, rebuildable, redownloadable public weights, or closed branches. The current `65.9109` reproduction path is preserved.
+
 ## Minimal New-Server Restore
 
 ```bash
